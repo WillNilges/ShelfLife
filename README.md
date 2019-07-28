@@ -1,4 +1,4 @@
-# ShelfLife
+https://www.amazon.com/Adapter-Laptop-Charger-Lenovo-Thinkpad/dp/B06XHN7M6Q/ref=sr_1_6?keywords=ThinkPad+X230T+charger&qid=1564336141&s=gateway&sr=8-6# ShelfLife
 An easy to use Rust application that automatically spins down and expires unused OKD projects
 
 This is an application I worked on during the CSH summer hackathon. It's used to increase the ease of managment of old OKD projects on CSH's Openshift cluster. We don't have a good way of managing these applications, so here it is!
@@ -32,4 +32,4 @@ export TEST_PROJECT="<namespace-to-query>"
 ```
 
 ## CLI Arguments
-To run a query on a known namespace, run the thing with the `n` flag
+To run a query on a known namespace, run with the `n` flag
