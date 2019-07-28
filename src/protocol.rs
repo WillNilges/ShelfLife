@@ -1,10 +1,10 @@
 use serde::Deserialize;
-use chrono::{DateTime, FixedOffset};
+//use chrono::{DateTime, FixedOffset};
 
 // Structs for Deployment
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DeploymentMetadata { pub creation_timestamp: DateTime<FixedOffset>}
+pub struct DeploymentMetadata { pub creation_timestamp: String}
 
 
 #[derive(Debug, Deserialize)]
@@ -35,5 +35,5 @@ pub struct RolebindingsResponse { pub items: Vec<RolebindingsItem> }
 pub struct DBItem {
     pub name: String,
     pub admins: Vec<String>,
-    pub last_deployment: DateTime<FixedOffset>
+    pub last_deployment: String
 }
