@@ -32,4 +32,4 @@ export TEST_PROJECT="<namespace-to-query>"
 ```
 
 ## CLI Arguments
-To run a query on a known namespace, run with the `n` flag
+To run a query on a known namespace, run with the `k` flag
