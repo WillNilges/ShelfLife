@@ -1,4 +1,4 @@
-https://www.amazon.com/Adapter-Laptop-Charger-Lenovo-Thinkpad/dp/B06XHN7M6Q/ref=sr_1_6?keywords=ThinkPad+X230T+charger&qid=1564336141&s=gateway&sr=8-6# ShelfLife
+# ShelfLife
 An easy to use Rust application that automatically spins down and expires unused OKD projects
 
 This is an application I worked on during the CSH summer hackathon. It's used to increase the ease of managment of old OKD projects on CSH's Openshift cluster. We don't have a good way of managing these applications, so here it is!
