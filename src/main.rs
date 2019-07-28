@@ -74,7 +74,7 @@ fn query_api_namespace(token: String, endpoint: String, namespace: String) -> Re
 
 fn get_db_namespace_table() -> Result<Vec<DBItem>, Box<std::error::Error>> {
     // Direct connection to a server. Will not look for other servers in the topology.
-    let client = Client::connect("localhost", 27017)
+    let client = Client::connect(&env::var("DB_ADDR")?, env::var("DB_PORT")?.to_string().parse::<u16>().unwrap())
         .expect("Failed to initialize client.");
     let coll = client.db("SHELFLIFE_NAMESPACES").collection("namespaces");
 
