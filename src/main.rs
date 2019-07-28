@@ -5,6 +5,7 @@ pub mod protocol;
 use protocol::*;
 use dotenv::dotenv;
 use std::env;
+use reqwest::StatusCode;
 use chrono::{DateTime};
 use mongodb::{bson, doc, Client, ThreadedClient};
 use mongodb::db::ThreadedDatabase;
@@ -21,22 +22,31 @@ fn main() -> Result<(), Box<std::error::Error>> {
              "******We nuke old projects******\n",
              " Get a job or get D E L E T E D");
 
+    let args: Vec<String> = env::args().collect();
+    if args.iter().any(|x| x == "n"){ query_known_namespace(token, endpoint, namespace); } else {
+        println!("No actions taken.");
+    }
+    println!("Finished :)");
+    Ok(())
+}
+
+
+fn query_known_namespace(token: String, endpoint: String, namespace: String) -> Result<(), Box<std::error::Error>>{
     // Query a project. Use their namespace to get their admin usernames and the last time they were built.
     println!("{}", format!("Querying API for namespace {}...", namespace).to_string());
     let namespace_info = query_api_namespace(token.to_string(), endpoint.to_string(), namespace.to_string())?;
     println!("API Response:");
-    println!("{} {:?} {}", namespace_info.name, namespace_info.admins, namespace_info.last_deployment); 
-
-    println!("Current Table of Projects:");
+    println!("{} {:?} {}", namespace_info.name, namespace_info.admins, namespace_info.last_deployment);
+    
     let current_table: Vec<DBItem> = get_db_namespace_table()?;
+    println!("Current Table of Projects:");
     println!("namespace | admins | last_deploy");
    
     for entry in &current_table {
         println!("{} {:?} {}", entry.name, entry.admins, entry.last_deployment);
     }
-
-    println!("Finished :)");
     Ok(())
+
 }
 
 
@@ -49,13 +59,23 @@ fn query_api_namespace(token: String, endpoint: String, namespace: String) -> Re
     let mut deploymentconfigs_resp = client.get(&deploymentconfigs_call)
         .header("Authorization", &token)
         .send()?;
-    let deploymentconfigs_json: DeploymentResponse = deploymentconfigs_resp.json()?;
+    
+    match deploymentconfigs_resp.status() {
+        StatusCode::OK => {},
+        _ => return Err(From::from("Error! Could not fetch deployment configs. Is the namespace wrong?")),
+    }
 
+    let deploymentconfigs_json: DeploymentResponse = deploymentconfigs_resp.json()?; 
     // Query for rolebindings (for the admins of the namespace)
     let rolebindings_call = format!("https://{}/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings", endpoint, namespace);
     let mut rolebindings_resp = client.get(&rolebindings_call)
         .header("Authorization", &token)
         .send()?;
+    
+    match rolebindings_resp.status() {
+        StatusCode::OK => {},
+        _ => return Err(From::from("Error! Could not fetch rolebindings for deployment. Is the namespace wrong?")),
+    }
     
     let rolebindings_resp_as_json: RolebindingsResponse = rolebindings_resp.json()?;
     let rolebindings_json_vector: Vec<String> = rolebindings_resp_as_json.items.into_iter()
@@ -68,6 +88,7 @@ fn query_api_namespace(token: String, endpoint: String, namespace: String) -> Re
         admins: rolebindings_json_vector,
         last_deployment: deploymentconfigs_json.items[0].metadata.creation_timestamp
     };
+    
     Ok(api_response)
 }
 
