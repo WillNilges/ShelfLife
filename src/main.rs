@@ -15,7 +15,9 @@ use mongodb::db::ThreadedDatabase;
 use mongodb::{bson, doc, Bson, Client, ThreadedClient};
 use prettytable::Table;
 
-fn main() -> Result<(), Box<std::error::Error>> {
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+fn main() -> Result<()> {
     dotenv().ok();
     let token = env::var("OKD_TOKEN")?;
     let endpoint = env::var("ENDPOINT")?;
@@ -49,7 +51,7 @@ fn query_known_namespace(
     token: String,
     endpoint: String,
     namespace: String,
-) -> Result<(), Box<std::error::Error>> {
+) -> Result<()> {
     // Query a project. Use their namespace to get their admin usernames and the last time they were built.
     println!(
         "{}",
@@ -108,7 +110,7 @@ fn query_api_namespace(
     token: String,
     endpoint: String,
     namespace: String,
-) -> Result<DBItem, Box<std::error::Error>> {
+) -> Result<DBItem> {
     let client = reqwest::Client::new();
     // Query for deployment configs (for their build dates)
     let deploymentconfigs_call = format!(
@@ -171,7 +173,7 @@ fn query_api_namespace(
     Ok(api_response)
 }
 
-fn get_db_namespace_table() -> Result<Vec<DBItem>, Box<std::error::Error>> {
+fn get_db_namespace_table() -> Result<Vec<DBItem>> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let client = Client::connect(
         &env::var("DB_ADDR")?,
@@ -212,7 +214,7 @@ fn get_db_namespace_table() -> Result<Vec<DBItem>, Box<std::error::Error>> {
     Ok(namespace_table)
 }
 
-fn add_item_to_db_namespace_table(item: DBItem) -> Result<(), Box<std::error::Error>> {
+fn add_item_to_db_namespace_table(item: DBItem) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let client = Client::connect(
         &env::var("DB_ADDR")?,
