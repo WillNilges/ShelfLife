@@ -12,7 +12,7 @@ use reqwest::StatusCode;
 use std::{env, io};
 //use chrono::{DateTime, FixedOffset};
 use mongodb::db::ThreadedDatabase;
-use mongodb::{bson, doc, Bson, Client, ThreadedClient};
+use mongodb::{bson, doc, Bson, ThreadedClient};
 use prettytable::Table;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -175,7 +175,7 @@ fn query_api_namespace(
 
 fn get_db_namespace_table() -> Result<Vec<DBItem>> {
     // Direct connection to a server. Will not look for other servers in the topology.
-    let client = Client::connect(
+    let client = mongodb::Client::connect(
         &env::var("DB_ADDR")?,
         env::var("DB_PORT")?.to_string().parse::<u16>().unwrap(),
     )
@@ -216,9 +216,9 @@ fn get_db_namespace_table() -> Result<Vec<DBItem>> {
 
 fn add_item_to_db_namespace_table(item: DBItem) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
-    let client = Client::connect(
+    let client = mongodb::Client::connect(
         &env::var("DB_ADDR")?,
-        env::var("DB_PORT")?.to_string().parse::<u16>().unwrap(),
+        env::var("DB_PORT")?.parse::<u16>().unwrap(),
     )
     .expect("Failed to initialize client.");
     let coll = client.db("SHELFLIFE_NAMESPACES").collection("namespaces");
