@@ -23,6 +23,15 @@ fn main() -> Result<()> {
     let endpoint = env::var("ENDPOINT")?;
     //let namespace = env::var("TEST_PROJECT")?;
 
+    let http_client = reqwest::Client::new();
+    let mongo_client = mongodb::Client::connect(
+        &env::var("DB_ADDR")?,
+        env::var("DB_PORT")?
+            .parse::<u16>()
+            .expect("DB_PORT should be an integer"),
+    )
+    .expect("should connect to mongodb");
+
     // Friendly and polite greeting...
     println!(
         "{}{}{}",
@@ -33,26 +42,34 @@ fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
     if args.iter().any(|x| x == "v") {
-        let _command = view_db_namespace_table();
-    }else if args.iter().any(|x| x == "k") {
+        let _command = view_db_namespace_table(&mongo_client);
+    } else if args.iter().any(|x| x == "k") {
         let namespace = args.last().unwrap().to_string();
         println!("{}", &namespace);
-        let _command = query_known_namespace(token, endpoint, namespace);
-        //dbg!(query.unwrap());
+        let _command =
+            query_known_namespace(&mongo_client, &http_client, token, endpoint, namespace);
+    //dbg!(query.unwrap());
     //else if args.iter().any(|x| x == "s") { sweep_namespaces(token, endpoint); } //WIP
     } else if args.iter().any(|x| x == "d") {
-        // If you get a 'd' argument, try to get the next argument after that one and use that to attempt to delete a db item. 
-        let _command = remove_item_from_db(args.last().unwrap().to_string());
+        // If you get a 'd' argument, try to get the next argument after that one and use that to attempt to delete a db item.
+        let _command = remove_item_from_db(&mongo_client, args.last().unwrap().to_string());
     } else {
-        println!("{}{}", "Usage: shelflife [options...] <parameter>\n",
-                         "    d <namespace>     Delete namespace out of MongoDB\n".to_string()
-                      + &"    k <namespace>     Query API and Database for a known namespace\n".to_string()
-                      + &"    v                 Print namespaces currently tracked in MongoDB".to_string());
+        println!(
+            "{}{}",
+            "Usage: shelflife [options...] <parameter>\n",
+            "    d <namespace>     Delete namespace out of MongoDB\n".to_string()
+                + &"    k <namespace>     Query API and Database for a known namespace\n"
+                    .to_string()
+                + &"    v                 Print namespaces currently tracked in MongoDB"
+                    .to_string()
+        );
     }
     Ok(())
 }
 
 fn query_known_namespace(
+    mongo_client: &mongodb::Client,
+    http_client: &reqwest::Client,
     token: String,
     endpoint: String,
     namespace: String,
@@ -63,6 +80,7 @@ fn query_known_namespace(
         format!("\nQuerying API for namespace {}...", namespace).to_string()
     );
     let namespace_info = query_api_namespace(
+        http_client,
         token.to_string(),
         endpoint.to_string(),
         namespace.to_string(),
@@ -74,7 +92,7 @@ fn query_known_namespace(
     );
 
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db_namespace_table()?;
+    let current_table: Vec<DBItem> = get_db_namespace_table(mongo_client)?;
     println!("\nCurrent Table of Projects:");
     let mut db_table = Table::new(); // Create the table
     db_table.add_row(row!["Namespace", "Admins", "Latest Deployment"]); // Add a row per time
@@ -93,14 +111,17 @@ fn query_known_namespace(
         .iter()
         .any(|x| x.name.to_string() == queried_namespace)
     {
-        println!("\nThis namespace ({}) is not in the database! Would you like to add it? (y/n): ", queried_namespace);
+        println!(
+            "\nThis namespace ({}) is not in the database! Would you like to add it? (y/n): ",
+            queried_namespace
+        );
         let mut input = String::new();
         io::stdin()
             .read_line(&mut input)
             .expect("Could not read response");
         if input.trim() == "y" {
             println!("Putting a ShelfLife on {}", queried_namespace);
-            let _table_add = add_item_to_db_namespace_table(namespace_info);
+            let _table_add = add_item_to_db_namespace_table(mongo_client, namespace_info);
         } else if input.trim() == "n" {
             println!("Ok.");
         } else {
@@ -113,52 +134,49 @@ fn query_known_namespace(
 }
 
 fn query_api_namespace(
+    http_client: &reqwest::Client,
     token: String,
     endpoint: String,
     namespace: String,
 ) -> Result<DBItem> {
-    let client = reqwest::Client::new();
     let token = format!("Bearer {}", token); // Set up token
 
-
-    // Call the API requesting info on the namespace to ensure we can access the api 
-    let namespace_call = format!(
-        "https://{}/api/v1/namespaces/{}",
-        endpoint, namespace
-    );
-    let namespace_resp = client
+    // Call the API requesting info on the namespace to ensure we can access the api
+    let namespace_call = format!("https://{}/api/v1/namespaces/{}", endpoint, namespace);
+    let namespace_resp = http_client
         .get(&namespace_call)
         .header("Authorization", &token)
-        .send()?; 
+        .send()?;
     match namespace_resp.status() {
         StatusCode::OK => {}
         StatusCode::FORBIDDEN => {
             println!("Forbidden.");
             return Err(From::from(
-                "Error! Could not fetch namespace information. Bad API token?"
-            ))
+                "Error! Could not fetch namespace information. Bad API token?",
+            ));
         }
         _ => {
             dbg!(namespace_resp);
             return Err(From::from(
-                "Error! Could not fetch namespace information. Is the namespace wrong?"
-            ))
+                "Error! Could not fetch namespace information. Is the namespace wrong?",
+            ));
         }
     }
+
     // Query for deployment configs (for their build dates)
     let deploymentconfigs_call = format!(
         "https://{}/oapi/v1/namespaces/{}/deploymentconfigs",
         endpoint, namespace
     );
-    let mut deploymentconfigs_resp = client
+    let mut deploymentconfigs_resp = http_client
         .get(&deploymentconfigs_call)
         .header("Authorization", &token)
         .send()?;
     match deploymentconfigs_resp.status() {
         StatusCode::OK => {}
         StatusCode::FORBIDDEN => {
-             return Err(From::from(
-                "Error! Could not fetch namespace information. Bad API token?"
+            return Err(From::from(
+                "Error! Could not fetch namespace information. Bad API token?",
             ))
         }
         _ => {
@@ -179,7 +197,7 @@ fn query_api_namespace(
         "https://{}/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings",
         endpoint, namespace
     );
-    let mut rolebindings_resp = client
+    let mut rolebindings_resp = http_client
         .get(&rolebindings_call)
         .header("Authorization", &token)
         .send()?;
@@ -187,8 +205,8 @@ fn query_api_namespace(
     match rolebindings_resp.status() {
         StatusCode::OK => {}
         StatusCode::FORBIDDEN => {
-             return Err(From::from(
-                "Error! Could not fetch namespace information. Bad API token?"
+            return Err(From::from(
+                "Error! Could not fetch namespace information. Bad API token?",
             ))
         }
         _ => {
@@ -215,15 +233,10 @@ fn query_api_namespace(
     Ok(api_response)
 }
 
-fn get_db_namespace_table() -> Result<Vec<DBItem>> {
-    // Direct connection to a server. Will not look for other servers in the topology.
-    let client = mongodb::Client::connect(
-        &env::var("DB_ADDR")?,
-        env::var("DB_PORT")?.to_string().parse::<u16>().unwrap(),
-    )
-    .expect("Failed to initialize client.");
-    let coll = client.db("SHELFLIFE_NAMESPACES").collection("namespaces");
-
+fn get_db_namespace_table(mongo_client: &mongodb::Client) -> Result<Vec<DBItem>> {
+    let coll = mongo_client
+        .db("SHELFLIFE_NAMESPACES")
+        .collection("namespaces");
     let mut namespace_table = Vec::new(); // The vec of namespace information we're gonna send back.
 
     // Find the document and receive a cursor
@@ -256,9 +269,9 @@ fn get_db_namespace_table() -> Result<Vec<DBItem>> {
     Ok(namespace_table)
 }
 
-fn view_db_namespace_table() -> Result<()> {
+fn view_db_namespace_table(mongo_client: &mongodb::Client) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db_namespace_table()?;
+    let current_table: Vec<DBItem> = get_db_namespace_table(mongo_client)?;
     println!("\nCurrent Table of Projects:");
     let mut db_table = Table::new(); // Create the table
     db_table.add_row(row!["Namespace", "Admins", "Latest Deployment"]); // Add a row per time
@@ -273,24 +286,22 @@ fn view_db_namespace_table() -> Result<()> {
     Ok(())
 }
 
-fn add_item_to_db_namespace_table(item: DBItem) -> Result<()> {
+fn add_item_to_db_namespace_table(mongo_client: &mongodb::Client, item: DBItem) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
-    let client = mongodb::Client::connect(
-        &env::var("DB_ADDR")?,
-        env::var("DB_PORT")?.parse::<u16>().unwrap(),
-    )
-    .expect("Failed to initialize client.");
-    let coll = client.db("SHELFLIFE_NAMESPACES").collection("namespaces");
+    let coll = mongo_client
+        .db("SHELFLIFE_NAMESPACES")
+        .collection("namespaces");
     coll.insert_one(doc!{"name": item.name, "admins": bson::to_bson(&item.admins)?, "last_deployment": item.last_deployment}, None).unwrap();
     Ok(())
 }
 
-fn remove_item_from_db(namespace: String) -> Result<()> {
+fn remove_item_from_db(mongo_client: &mongodb::Client, namespace: String) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
-    let client = mongodb::Client::connect(&env::var("DB_ADDR")?, env::var("DB_PORT")?.to_string().parse::<u16>().unwrap())
-        .expect("Failed to initialize client.");
-    let coll = client.db("SHELFLIFE_NAMESPACES").collection("namespaces");
-    coll.find_one_and_delete(doc!{"name": &namespace}, None).unwrap();
+    let coll = mongo_client
+        .db("SHELFLIFE_NAMESPACES")
+        .collection("namespaces");
+    coll.find_one_and_delete(doc! {"name": &namespace}, None)
+        .unwrap();
     println!("{} has been removed.", &namespace);
     Ok(())
 }
