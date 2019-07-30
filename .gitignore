@@ -1,3 +1,13 @@
+# Environment file
+.env
+
+# Rust build files
 /target
 **/*.rs.bk
-.env
+
+# Vim swap files
+*.swp
+
+# IntelliJ files
+.idea/
+*.iml
