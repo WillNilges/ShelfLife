@@ -1,4 +1,3 @@
-extern crate dotenv;
 extern crate mongodb;
 extern crate reqwest;
 #[macro_use]
@@ -6,68 +5,15 @@ extern crate prettytable;
 
 pub mod protocol;
 
-use dotenv::dotenv;
-use protocol::*;
-use reqwest::StatusCode;
-use std::{env, io};
-//use chrono::{DateTime, FixedOffset};
 use mongodb::db::ThreadedDatabase;
 use mongodb::{bson, doc, Bson, ThreadedClient};
 use prettytable::Table;
+use protocol::*;
+use reqwest::StatusCode;
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-fn main() -> Result<()> {
-    dotenv().ok();
-    let token = env::var("OKD_TOKEN")?;
-    let endpoint = env::var("ENDPOINT")?;
-    //let namespace = env::var("TEST_PROJECT")?;
-
-    let http_client = reqwest::Client::new();
-    let mongo_client = mongodb::Client::connect(
-        &env::var("DB_ADDR")?,
-        env::var("DB_PORT")?
-            .parse::<u16>()
-            .expect("DB_PORT should be an integer"),
-    )
-    .expect("should connect to mongodb");
-
-    // Friendly and polite greeting...
-    println!(
-        "{}{}{}",
-        "\n      Welcome to ShelfLife     \n",
-        "******We nuke old projects******\n",
-        " Get a job or get D E L E T E D \n"
-    );
-
-    let args: Vec<String> = env::args().collect();
-    if args.iter().any(|x| x == "v") {
-        let _command = view_db_namespace_table(&mongo_client);
-    } else if args.iter().any(|x| x == "k") {
-        let namespace = args.last().unwrap().to_string();
-        println!("{}", &namespace);
-        let _command =
-            query_known_namespace(&mongo_client, &http_client, token, endpoint, namespace);
-    //dbg!(query.unwrap());
-    //else if args.iter().any(|x| x == "s") { sweep_namespaces(token, endpoint); } //WIP
-    } else if args.iter().any(|x| x == "d") {
-        // If you get a 'd' argument, try to get the next argument after that one and use that to attempt to delete a db item.
-        let _command = remove_item_from_db(&mongo_client, args.last().unwrap().to_string());
-    } else {
-        println!(
-            "{}{}",
-            "Usage: shelflife [options...] <parameter>\n",
-            "    d <namespace>     Delete namespace out of MongoDB\n".to_string()
-                + &"    k <namespace>     Query API and Database for a known namespace\n"
-                    .to_string()
-                + &"    v                 Print namespaces currently tracked in MongoDB"
-                    .to_string()
-        );
-    }
-    Ok(())
-}
-
-fn query_known_namespace(
+pub fn query_known_namespace(
     mongo_client: &mongodb::Client,
     http_client: &reqwest::Client,
     token: String,
@@ -116,7 +62,7 @@ fn query_known_namespace(
             queried_namespace
         );
         let mut input = String::new();
-        io::stdin()
+        std::io::stdin()
             .read_line(&mut input)
             .expect("Could not read response");
         if input.trim() == "y" {
@@ -269,7 +215,7 @@ fn get_db_namespace_table(mongo_client: &mongodb::Client) -> Result<Vec<DBItem>>
     Ok(namespace_table)
 }
 
-fn view_db_namespace_table(mongo_client: &mongodb::Client) -> Result<()> {
+pub fn view_db_namespace_table(mongo_client: &mongodb::Client) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
     let current_table: Vec<DBItem> = get_db_namespace_table(mongo_client)?;
     println!("\nCurrent Table of Projects:");
@@ -295,7 +241,7 @@ fn add_item_to_db_namespace_table(mongo_client: &mongodb::Client, item: DBItem) 
     Ok(())
 }
 
-fn remove_item_from_db(mongo_client: &mongodb::Client, namespace: String) -> Result<()> {
+pub fn remove_item_from_db(mongo_client: &mongodb::Client, namespace: String) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")

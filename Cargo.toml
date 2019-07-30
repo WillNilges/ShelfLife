@@ -13,3 +13,11 @@ chrono = { version = "0.4.7", features = ["serde"] }
 dotenv = "0.14.1"
 mongodb = "0.3.12"
 prettytable-rs = "0.8.0"
+
+[lib]
+name = "shelflife"
+path = "src/lib.rs"
+
+[[bin]]
+name = "shelflife"
+path = "src/bin/main.rs"
