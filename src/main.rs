@@ -32,21 +32,22 @@ fn main() -> Result<()> {
     );
 
     let args: Vec<String> = env::args().collect();
-    /*if args.iter().any(|x| x == "v") {
-        dbg!("wip");
-    }else*/ if args.iter().any(|x| x == "k") {
+    if args.iter().any(|x| x == "v") {
+        let _command = view_db_namespace_table();
+    }else if args.iter().any(|x| x == "k") {
         let namespace = args.last().unwrap().to_string();
         println!("{}", &namespace);
-        let _query = query_known_namespace(token, endpoint, namespace);
+        let _command = query_known_namespace(token, endpoint, namespace);
         //dbg!(query.unwrap());
     //else if args.iter().any(|x| x == "s") { sweep_namespaces(token, endpoint); } //WIP
     } else if args.iter().any(|x| x == "d") {
         // If you get a 'd' argument, try to get the next argument after that one and use that to attempt to delete a db item. 
-        let _query = remove_item_from_db(args.last().unwrap().to_string());
+        let _command = remove_item_from_db(args.last().unwrap().to_string());
     } else {
         println!("{}{}", "Usage: shelflife [options...] <parameter>\n",
-                         "    k                 Query API and Database for a known namespace\n".to_string()
-                      + &"    d <namespace>     Delete namespace out of MongoDB".to_string());
+                         "    d <namespace>     Delete namespace out of MongoDB\n".to_string()
+                      + &"    k <namespace>     Query API and Database for a known namespace\n".to_string()
+                      + &"    v                 Print namespaces currently tracked in MongoDB".to_string());
     }
     Ok(())
 }
@@ -253,6 +254,23 @@ fn get_db_namespace_table() -> Result<Vec<DBItem>> {
         }
     }
     Ok(namespace_table)
+}
+
+fn view_db_namespace_table() -> Result<()> {
+    // Query the DB and get back a table of already added namespaces
+    let current_table: Vec<DBItem> = get_db_namespace_table()?;
+    println!("\nCurrent Table of Projects:");
+    let mut db_table = Table::new(); // Create the table
+    db_table.add_row(row!["Namespace", "Admins", "Latest Deployment"]); // Add a row per time
+    for row in &current_table {
+        db_table.add_row(row![
+            row.name,
+            format!("{:?}", row.admins),
+            row.last_deployment
+        ]);
+    }
+    db_table.printstd(); // Print the table to stdout
+    Ok(())
 }
 
 fn add_item_to_db_namespace_table(item: DBItem) -> Result<()> {
