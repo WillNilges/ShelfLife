@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     dotenv().ok();
     let token = env::var("OKD_TOKEN")?;
     let endpoint = env::var("ENDPOINT")?;
-    let namespace = env::var("TEST_PROJECT")?;
+    //let namespace = env::var("TEST_PROJECT")?;
 
     // Friendly and polite greeting...
     println!(
@@ -32,8 +32,13 @@ fn main() -> Result<()> {
     );
 
     let args: Vec<String> = env::args().collect();
-    if args.iter().any(|x| x == "k") {
-        let _query = query_known_namespace(token, endpoint, namespace); 
+    /*if args.iter().any(|x| x == "v") {
+        dbg!("wip");
+    }else*/ if args.iter().any(|x| x == "k") {
+        let namespace = args.last().unwrap().to_string();
+        println!("{}", &namespace);
+        let _query = query_known_namespace(token, endpoint, namespace);
+        //dbg!(query.unwrap());
     //else if args.iter().any(|x| x == "s") { sweep_namespaces(token, endpoint); } //WIP
     } else if args.iter().any(|x| x == "d") {
         // If you get a 'd' argument, try to get the next argument after that one and use that to attempt to delete a db item. 
@@ -82,17 +87,18 @@ fn query_known_namespace(
     db_table.printstd(); // Print the table to stdout
 
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
+    let queried_namespace = namespace_info.name.to_string();
     if !current_table
         .iter()
-        .any(|x| x.name.to_string() == namespace_info.name.to_string())
+        .any(|x| x.name.to_string() == queried_namespace)
     {
-        println!("\nThis namespace is not in the database! Would you like to add it? (y/n): ");
+        println!("\nThis namespace ({}) is not in the database! Would you like to add it? (y/n): ", queried_namespace);
         let mut input = String::new();
         io::stdin()
             .read_line(&mut input)
             .expect("Could not read response");
         if input.trim() == "y" {
-            println!("Putting a ShelfLife on {}", namespace_info.name.to_string());
+            println!("Putting a ShelfLife on {}", queried_namespace);
             let _table_add = add_item_to_db_namespace_table(namespace_info);
         } else if input.trim() == "n" {
             println!("Ok.");
@@ -111,18 +117,49 @@ fn query_api_namespace(
     namespace: String,
 ) -> Result<DBItem> {
     let client = reqwest::Client::new();
+    let token = format!("Bearer {}", token); // Set up token
+
+
+    // Call the API requesting info on the namespace to ensure we can access the api 
+    let namespace_call = format!(
+        "https://{}/api/v1/namespaces/{}",
+        endpoint, namespace
+    );
+    let namespace_resp = client
+        .get(&namespace_call)
+        .header("Authorization", &token)
+        .send()?; 
+    match namespace_resp.status() {
+        StatusCode::OK => {}
+        StatusCode::FORBIDDEN => {
+            println!("Forbidden.");
+            return Err(From::from(
+                "Error! Could not fetch namespace information. Bad API token?"
+            ))
+        }
+        _ => {
+            dbg!(namespace_resp);
+            return Err(From::from(
+                "Error! Could not fetch namespace information. Is the namespace wrong?"
+            ))
+        }
+    }
     // Query for deployment configs (for their build dates)
     let deploymentconfigs_call = format!(
         "https://{}/oapi/v1/namespaces/{}/deploymentconfigs",
         endpoint, namespace
     );
-    let token = format!("Bearer {}", token);
     let mut deploymentconfigs_resp = client
         .get(&deploymentconfigs_call)
         .header("Authorization", &token)
         .send()?;
     match deploymentconfigs_resp.status() {
         StatusCode::OK => {}
+        StatusCode::FORBIDDEN => {
+             return Err(From::from(
+                "Error! Could not fetch namespace information. Bad API token?"
+            ))
+        }
         _ => {
             return Err(From::from(
                 "Error! Could not fetch deployment configs. Is the namespace wrong?",
@@ -148,6 +185,11 @@ fn query_api_namespace(
 
     match rolebindings_resp.status() {
         StatusCode::OK => {}
+        StatusCode::FORBIDDEN => {
+             return Err(From::from(
+                "Error! Could not fetch namespace information. Bad API token?"
+            ))
+        }
         _ => {
             return Err(From::from(
                 "Error! Could not fetch rolebindings for deployment. Is the namespace wrong?",
