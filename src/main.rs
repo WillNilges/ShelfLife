@@ -33,17 +33,16 @@ fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
     if args.iter().any(|x| x == "k") {
-        let _query = query_known_namespace(token, endpoint, namespace);
+        let _query = query_known_namespace(token, endpoint, namespace); 
+    //else if args.iter().any(|x| x == "s") { sweep_namespaces(token, endpoint); } //WIP
+    } else if args.iter().any(|x| x == "d") {
+        // If you get a 'd' argument, try to get the next argument after that one and use that to attempt to delete a db item. 
+        let _query = remove_item_from_db(args.last().unwrap().to_string());
+    } else {
+        println!("{}{}", "Usage: shelflife [options...] <parameter>\n",
+                         "    k                 Query API and Database for a known namespace\n".to_string()
+                      + &"    d <namespace>     Delete namespace out of MongoDB".to_string());
     }
-    //    else if args.iter().any(|x| x == "s") { sweep_namespaces(token, endpoint); } //WIP
-    else {
-        println!(
-            "{}{}",
-            "Usage: shelflife [options...] <parameter>\n",
-            "    k        Query API and Database for a known namespace"
-        );
-    }
-    println!("Finished :)");
     Ok(())
 }
 
@@ -223,5 +222,15 @@ fn add_item_to_db_namespace_table(item: DBItem) -> Result<()> {
     .expect("Failed to initialize client.");
     let coll = client.db("SHELFLIFE_NAMESPACES").collection("namespaces");
     coll.insert_one(doc!{"name": item.name, "admins": bson::to_bson(&item.admins)?, "last_deployment": item.last_deployment}, None).unwrap();
+    Ok(())
+}
+
+fn remove_item_from_db(namespace: String) -> Result<()> {
+    // Direct connection to a server. Will not look for other servers in the topology.
+    let client = mongodb::Client::connect(&env::var("DB_ADDR")?, env::var("DB_PORT")?.to_string().parse::<u16>().unwrap())
+        .expect("Failed to initialize client.");
+    let coll = client.db("SHELFLIFE_NAMESPACES").collection("namespaces");
+    coll.find_one_and_delete(doc!{"name": &namespace}, None).unwrap();
+    println!("{} has been removed.", &namespace);
     Ok(())
 }
