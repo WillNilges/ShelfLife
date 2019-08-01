@@ -13,36 +13,6 @@ use reqwest::StatusCode;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub fn query_known_project(
-    http_client: &reqwest::Client,
-    token: String,
-    endpoint: String,
-    project: String,
-) -> Result<reqwest::Response> {
-    let token = format!("Bearer {}", token);
-    
-    // Call the API for the project name
-    let project_call = format!("https://{}/oapi/v1/projects/{}", endpoint, project);
-    let project_resp = http_client
-        .get(&project_call)
-        .header("Authorization", &token)
-        .send()?;
-    match project_resp.status() {
-        StatusCode::OK => {}
-        StatusCode::FORBIDDEN => {
-            return Err(From::from(
-                "Error! could not fetch project info. Might be a bad API token, or the project doesn't exist.",
-            ));
-        } 
-        _ => {
-            return Err(From::from(
-                "Error! Could not fetch namespace information. An error occurred."
-            ));
-        }
-    }
-    Ok(project_resp)
-}
-
 pub fn query_known_namespace(
     mongo_client: &mongodb::Client,
     http_client: &reqwest::Client,
@@ -55,7 +25,7 @@ pub fn query_known_namespace(
         "{}",
         format!("\nQuerying API for namespace {}...", namespace).to_string()
     );
-    let namespace_info = query_api_namespace(
+    let namespace_info = get_shelflife_info(
         http_client,
         token.to_string(),
         endpoint.to_string(),
@@ -109,7 +79,8 @@ pub fn query_known_namespace(
     Ok(())
 }
 
-fn query_api_namespace(
+// Queries the API and returns a Struct with data relevant for shelflife's operation.
+fn get_shelflife_info(
     http_client: &reqwest::Client,
     token: String,
     endpoint: String,
@@ -209,6 +180,56 @@ fn query_api_namespace(
     Ok(api_response)
 }
 
+// 
+// Make a general call to the Openshift API about some namespace info.
+pub fn make_api_call(
+    http_client: &reqwest::Client,
+    attrib: String,
+    token: String,
+    endpoint: String,
+    namespace: String,
+) -> Result<reqwest::Response> {
+    let mut project_call = format!("https://{}/oapi/v1/projects/{}", endpoint, namespace); 
+    match attrib.as_ref() {
+        "project" => {
+            project_call = format!("https://{}/oapi/v1/projects/{}", endpoint, namespace);
+        }      
+        "namespace" => {
+            project_call = format!("https://{}/api/v1/namespaces/{}", endpoint, namespace);
+        }
+        _ => {
+           return Err(From::from(
+                "Error! Invalid attrib!",
+            ));
+ 
+        }
+        
+    }
+
+    let token = format!("Bearer {}", token);
+    
+    // Call the API for the project name
+    //let project_call = format!(url, endpoint, project);
+    let project_resp = http_client
+        .get(&project_call)
+        .header("Authorization", &token)
+        .send()?;
+    match project_resp.status() {
+        StatusCode::OK => {}
+        StatusCode::FORBIDDEN => {
+            return Err(From::from(
+                "Error! could not fetch project info. Might be a bad API token, or the project doesn't exist.",
+            ));
+        } 
+        _ => {
+            return Err(From::from(
+                "Error! Could not fetch namespace information. An error occurred."
+            ));
+        }
+    }
+    Ok(project_resp)
+}
+
 fn get_db_namespace_table(mongo_client: &mongodb::Client) -> Result<Vec<DBItem>> {
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
@@ -271,7 +292,7 @@ fn add_item_to_db_namespace_table(mongo_client: &mongodb::Client, item: DBItem) 
     Ok(())
 }
 
-pub fn remove_item_from_db(mongo_client: &mongodb::Client, namespace: String) -> Result<()> {
+pub fn remove_item_from_db_namespace_table(mongo_client: &mongodb::Client, namespace: String) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
