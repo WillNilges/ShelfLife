@@ -39,33 +39,31 @@ fn main() -> Result<()> {
         let _command = view_db_namespace_table(&mongo_client);
     } else if args.iter().any(|x| x == "k") {
         let namespace = args.last().unwrap().to_string();
-        println!("{}", &namespace);
-        let _command =
-            query_known_namespace(&mongo_client, &http_client, token, endpoint, namespace);
-    //dbg!(query.unwrap());
-    //else if args.iter().any(|x| x == "s") { sweep_namespaces(token, endpoint); } //WIP
+        let _command = query_known_namespace(
+            &mongo_client,
+            &http_client,
+            token,
+            endpoint,
+            namespace
+        );
     } else if args.iter().any(|x| x == "d") {
         // If you get a 'd' argument, try to get the next argument after that one and use that to attempt to delete a db item.
         let _command = remove_item_from_db_namespace_table(&mongo_client, args.last().unwrap().to_string());
     } else if args.iter().any(|x| x == "p") {
+        let call = format!("https://{}/oapi/v1/projects/{}", endpoint, args.last().unwrap().to_string());
         let command = make_api_call(
             &http_client,
-            "project".to_string(),
-            token,
-            endpoint,
-            args.last().unwrap().to_string()
-        );
+            call,
+            token);
         dbg!(Some(command)); 
     } else {
         println!(
             "{}{}",
             "Usage: shelflife [options...] <parameter>\n",
-            "    d <namespace>     Delete namespace out of MongoDB\n".to_string()
-                + &"    k <namespace>     Query API and Database for a known namespace\n"
-                    .to_string()
-                + &"    v                 Print namespaces currently tracked in MongoDB\n"
-                    .to_string()
-                + &"    p <project>       Query API for a known project"
+              "    d <namespace>     Delete namespace out of MongoDB\n".to_string()
+            + &"    k <namespace>     Query API and Database for a known namespace\n".to_string()
+            + &"    p <namespace>       Query API for a known project\n".to_string()
+            + &"    v                 Print namespaces currently tracked in MongoDB\n".to_string()
         );
     }
     Ok(())

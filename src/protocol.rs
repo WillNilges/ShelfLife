@@ -4,14 +4,20 @@ use serde::Deserialize;
 // Structs for Deployment
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DeploymentMetadata {
-    pub creation_timestamp: String,
+pub struct DeploymentCondition {
+    pub last_update_time: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentStatus {
+    pub conditions: Vec<DeploymentCondition>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentItem {
-    pub metadata: DeploymentMetadata,
+    pub status: DeploymentStatus,
 }
 
 #[derive(Debug, Deserialize)]

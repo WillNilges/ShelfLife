@@ -13,6 +13,19 @@ use reqwest::StatusCode;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+// Make a call to the Openshift API about some namespace info.
+pub fn make_api_call(
+    http_client: &reqwest::Client,
+    call: String,
+    token: String,
+) -> Result<reqwest::Response> {
+    let project_resp = http_client 
+        .get(&call)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()?;
+    Ok(project_resp)
+}
+
 pub fn query_known_namespace(
     mongo_client: &mongodb::Client,
     http_client: &reqwest::Client,
@@ -31,7 +44,7 @@ pub fn query_known_namespace(
         endpoint.to_string(),
         namespace.to_string(),
     )?;
-    print!("\nAPI Response: ");
+    print!("\n > > > API Response > > > ");
     println!(
         "{} {:?} {}",
         namespace_info.name, namespace_info.admins, namespace_info.last_deployment
@@ -89,54 +102,69 @@ fn get_shelflife_info(
     let token = format!("Bearer {}", token); // Set up token
 
     // Call the API requesting info on the namespace to ensure we can access the api
-    let namespace_call = format!("https://{}/api/v1/namespaces/{}", endpoint, namespace);
+    // Formulate the call
+     let namespace_call = format!(
+        "https://{}/api/v1/namespaces/{}",
+        endpoint, namespace
+    ); 
+
+    // Make the call
     let namespace_resp = http_client
         .get(&namespace_call)
         .header("Authorization", &token)
         .send()?;
+
+    // Ensure the call was successful
     match namespace_resp.status() {
         StatusCode::OK => {}
         StatusCode::FORBIDDEN => {
-            println!("Forbidden.");
             return Err(From::from(
-                "Error! Could not fetch namespace information. Bad API token?",
+                "Error! Could not fetch namespace information. Bad API token or wrong namespace?",
             ));
         }
         _ => {
             dbg!(namespace_resp);
             return Err(From::from(
-                "Error! Could not fetch namespace information. Is the namespace wrong?",
+                "Error! Could not fetch namespace information.",
             ));
         }
     }
 
     // Query for deployment configs (for their build dates)
+    // Formulate the call
     let deploymentconfigs_call = format!(
         "https://{}/oapi/v1/namespaces/{}/deploymentconfigs",
         endpoint, namespace
     );
+    // Make the call
     let mut deploymentconfigs_resp = http_client
         .get(&deploymentconfigs_call)
         .header("Authorization", &token)
         .send()?;
+
+    // Ensure the call was successful
     match deploymentconfigs_resp.status() {
         StatusCode::OK => {}
         StatusCode::FORBIDDEN => {
             return Err(From::from(
-                "Error! Could not fetch namespace information. Bad API token?",
+                "Error! Could not fetch deploymentconfig information. Bad API token or wrong namespace?",
             ))
         }
         _ => {
             return Err(From::from(
-                "Error! Could not fetch deployment configs. Is the namespace wrong?",
+                "Error! Could not fetch deploymentconfig information.",
             ))
         }
     }
-    let deploymentconfigs_json: DeploymentResponse = deploymentconfigs_resp.json()?;
-    // Get all of the deployment dates of all of the deployments.
+
+    let deploymentconfigs_json: DeploymentResponse = deploymentconfigs_resp.json()?; // Bind json of reply to struct.
+    // Get the last update times of all deploymentconfigs.
     let mut last_deployments = Vec::new();
     for config in deploymentconfigs_json.items {
-        last_deployments.push(config.metadata.creation_timestamp);
+        for condition in config.status.conditions {
+            last_deployments.push(condition.last_update_time);
+        }
+        //last_deployments.push(config.status.conditions.get(0).unwrap().last_update_time);
     }
 
     // Query for rolebindings (for the admins of the namespace)
@@ -175,62 +203,14 @@ fn get_shelflife_info(
     let api_response = DBItem {
         name: namespace,
         admins: rolebindings_json_vector,
-        last_deployment: last_deployments.first().unwrap().to_string(),
+        last_deployment:
+            match last_deployments.first() {
+                Some(ref x) => x.to_string(),
+                _ => "N/A".to_string(),
+            }
+//Some(ref last_deployments.first()),
     };
     Ok(api_response)
-}
-
-// 
-// Make a general call to the Openshift API about some namespace info.
-pub fn make_api_call(
-    http_client: &reqwest::Client,
-    attrib: String,
-    token: String,
-    endpoint: String,
-    namespace: String,
-) -> Result<reqwest::Response> {
-    let mut project_call = format!("https://{}/oapi/v1/projects/{}", endpoint, namespace); // Return namespace info by default. 
-    match attrib.as_ref() {
-        "project" => {
-            project_call = format!("https://{}/oapi/v1/projects/{}", endpoint, namespace);
-        }      
-        "namespace" => {
-            project_call = format!("https://{}/api/v1/namespaces/{}", endpoint, namespace);
-        }
-        "build" => {
-            project_call = format!("https://{}/apis/build.openshift.io/v1/namespaces/{}/builds", endpoint, namespace);
-        }
-        _ => {
-           return Err(From::from(
-                "Error! Invalid attrib!",
-            ));
- 
-        }
-        
-    }
-
-    let token = format!("Bearer {}", token);
-    
-    // Call the API for the project name
-    //let project_call = format!(url, endpoint, project);
-    let project_resp = http_client
-        .get(&project_call)
-        .header("Authorization", &token)
-        .send()?;
-    match project_resp.status() {
-        StatusCode::OK => {}
-        StatusCode::FORBIDDEN => {
-            return Err(From::from(
-                "Error! could not fetch project info. Might be a bad API token, or the project doesn't exist.",
-            ));
-        } 
-        _ => {
-            return Err(From::from(
-                "Error! Could not fetch namespace information. An error occurred."
-            ));
-        }
-    }
-    Ok(project_resp)
 }
 
 fn get_db_namespace_table(mongo_client: &mongodb::Client) -> Result<Vec<DBItem>> {
