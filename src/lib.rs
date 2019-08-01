@@ -52,18 +52,7 @@ pub fn query_known_namespace(
 
     // Query the DB and get back a table of already added namespaces
     let current_table: Vec<DBItem> = get_db_namespace_table(mongo_client)?;
-    println!("\nCurrent Table of Projects:");
-    let mut db_table = Table::new(); // Create the table
-    db_table.add_row(row!["Namespace", "Admins", "Latest Deployment"]); // Add a row per time
-    for row in &current_table {
-        db_table.add_row(row![
-            row.name,
-            format!("{:?}", row.admins),
-            row.last_deployment
-        ]);
-    }
-    db_table.printstd(); // Print the table to stdout
-
+    
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
     let queried_namespace = namespace_info.name.to_string();
     if !current_table
@@ -164,7 +153,6 @@ fn get_shelflife_info(
         for condition in config.status.conditions {
             last_deployments.push(condition.last_update_time);
         }
-        //last_deployments.push(config.status.conditions.get(0).unwrap().last_update_time);
     }
 
     // Query for rolebindings (for the admins of the namespace)

@@ -7,12 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = "2.33.0"
+dotenv = "0.14.1"
+prettytable-rs = "0.8.0"
 reqwest = "0.9.19"
 serde = "1.0.97"
-chrono = { version = "0.4.7", features = ["serde"] }
-dotenv = "0.14.1"
 mongodb = "0.3.12"
-prettytable-rs = "0.8.0"
+chrono = { version = "0.4.7", features = ["serde"] }
 
 [lib]
 name = "shelflife"
@@ -21,3 +22,4 @@ path = "src/lib.rs"
 [[bin]]
 name = "shelflife"
 path = "src/bin/main.rs"
+

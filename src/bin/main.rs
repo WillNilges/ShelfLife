@@ -1,9 +1,11 @@
-extern crate dotenv;
 extern crate shelflife;
+extern crate clap;
+extern crate dotenv;
 
+use std::env;
+use clap::{Arg, App};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
-use std::env;
 
 use shelflife::{make_api_call,
                 query_known_namespace,
@@ -15,8 +17,7 @@ fn main() -> Result<()> {
     dotenv().ok();
     let token = env::var("OKD_TOKEN")?;
     let endpoint = env::var("ENDPOINT")?;
-    //let namespace = env::var("TEST_PROJECT")?;
-
+    
     let http_client = reqwest::Client::new();
     let mongo_client = mongodb::Client::connect(
         &env::var("DB_ADDR")?,
@@ -34,37 +35,77 @@ fn main() -> Result<()> {
         " Get a job or get D E L E T E D \n"
     );
 
-    let args: Vec<String> = env::args().collect();
-    if args.iter().any(|x| x == "v") {
-        let _command = view_db_namespace_table(&mongo_client);
-    } else if args.iter().any(|x| x == "k") {
-        let namespace = args.last().unwrap().to_string();
-        let _command = query_known_namespace(
-            &mongo_client,
-            &http_client,
-            token,
-            endpoint,
-            namespace
-        );
-    } else if args.iter().any(|x| x == "d") {
-        // If you get a 'd' argument, try to get the next argument after that one and use that to attempt to delete a db item.
-        let _command = remove_item_from_db_namespace_table(&mongo_client, args.last().unwrap().to_string());
-    } else if args.iter().any(|x| x == "p") {
-        let call = format!("https://{}/oapi/v1/projects/{}", endpoint, args.last().unwrap().to_string());
-        let command = make_api_call(
-            &http_client,
-            call,
-            token);
-        dbg!(Some(command)); 
-    } else {
-        println!(
-            "{}{}",
-            "Usage: shelflife [options...] <parameter>\n",
-              "    d <namespace>     Delete namespace out of MongoDB\n".to_string()
-            + &"    k <namespace>     Query API and Database for a known namespace\n".to_string()
-            + &"    p <namespace>       Query API for a known project\n".to_string()
-            + &"    v                 Print namespaces currently tracked in MongoDB\n".to_string()
-        );
+    let matches = App::new("ShelfLife")
+        .version("0.0.5 or something")
+        .author("Willard N. <willnilges@mail.rit.edu>")
+        .about("Automatic management of spin-down and deletion of OKD projects.")
+        .arg(Arg::with_name("delete")
+            .short("d")
+            .long("delete")
+            .value_name("NAMESPACE")
+            .help("Deletes a namespace out of MongoDB")
+            .takes_value(true))
+        .arg(Arg::with_name("known")
+            .short("k")
+            .long("known")
+            .value_name("NAMESPACE")
+            .help("Query API and Database for a known namespace")
+            .takes_value(true))
+        .arg(Arg::with_name("project")
+            .short("p")
+            .long("project")
+            .value_name("NAMESPACE")
+            .help("Query API for project info about a namespace")
+            .takes_value(true))
+        .arg(Arg::with_name("view")
+            .short("v")
+            .long("view")
+            .help("Print namespaces currently tracked in MongoDB"))
+        .get_matches();
+
+    match matches.value_of("delete") {
+        None => {}
+        _ => {
+            let _command = remove_item_from_db_namespace_table(
+                &mongo_client,
+                matches
+                    .value_of("delete")
+                    .unwrap()
+                    .to_string());
+        }
+    }
+    
+    match matches.value_of("known") {
+        None => {}
+        _ => {
+            let namespace = matches.value_of("known").unwrap().to_string();
+            let _command = query_known_namespace(
+                &mongo_client,
+                &http_client,
+                token.to_string(),
+                endpoint.to_string(),
+                namespace
+            );
+        }
+    }
+
+    match matches.value_of("project") {
+        None => {}
+        _ => {
+            let call = format!("https://{}/oapi/v1/projects/{}", endpoint, &matches.value_of("project").unwrap().to_string());
+            let command = make_api_call(
+                &http_client,
+                call,
+                token);
+            dbg!(Some(command)); 
+        }
+    }
+
+    match matches.occurrences_of("view") {
+        0 => {}
+        _ => {
+            let _command = view_db_namespace_table(&mongo_client);       
+        }
     }
     Ok(())
 }
