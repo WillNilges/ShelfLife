@@ -33,4 +33,9 @@ To use this app, you'll need a few things:
   file to `.env` and then fill in the appropriate values.
 
 ## CLI Arguments
-To run a query on a known namespace, run with the `k` flag
+Usage: shelflife [options...] <parameter>
+    d <namespace>     Delete namespace out of MongoDB
+    k <namespace>     Query API and Database for a known namespace
+    v                 Print namespaces currently tracked in MongoDB
+    p <project>       Query API for a known project
+
