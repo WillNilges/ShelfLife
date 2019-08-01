@@ -189,13 +189,16 @@ pub fn make_api_call(
     endpoint: String,
     namespace: String,
 ) -> Result<reqwest::Response> {
-    let mut project_call = format!("https://{}/oapi/v1/projects/{}", endpoint, namespace); 
+    let mut project_call = format!("https://{}/oapi/v1/projects/{}", endpoint, namespace); // Return namespace info by default. 
     match attrib.as_ref() {
         "project" => {
             project_call = format!("https://{}/oapi/v1/projects/{}", endpoint, namespace);
         }      
         "namespace" => {
             project_call = format!("https://{}/api/v1/namespaces/{}", endpoint, namespace);
+        }
+        "build" => {
+            project_call = format!("https://{}/apis/build.openshift.io/v1/namespaces/{}/builds", endpoint, namespace);
         }
         _ => {
            return Err(From::from(
