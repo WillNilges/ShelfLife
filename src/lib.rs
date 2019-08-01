@@ -13,6 +13,36 @@ use reqwest::StatusCode;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+pub fn query_known_project(
+    http_client: &reqwest::Client,
+    token: String,
+    endpoint: String,
+    project: String,
+) -> Result<reqwest::Response> {
+    let token = format!("Bearer {}", token);
+    
+    // Call the API for the project name
+    let project_call = format!("https://{}/oapi/v1/projects/{}", endpoint, project);
+    let project_resp = http_client
+        .get(&project_call)
+        .header("Authorization", &token)
+        .send()?;
+    match project_resp.status() {
+        StatusCode::OK => {}
+        StatusCode::FORBIDDEN => {
+            return Err(From::from(
+                "Error! could not fetch project info. Might be a bad API token, or the project doesn't exist.",
+            ));
+        } 
+        _ => {
+            return Err(From::from(
+                "Error! Could not fetch namespace information. An error occurred."
+            ));
+        }
+    }
+    Ok(project_resp)
+}
+
 pub fn query_known_namespace(
     mongo_client: &mongodb::Client,
     http_client: &reqwest::Client,

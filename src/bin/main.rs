@@ -5,7 +5,11 @@ use dotenv::dotenv;
 use mongodb::ThreadedClient;
 use std::env;
 
-use shelflife::{query_known_namespace, remove_item_from_db, view_db_namespace_table, Result};
+use shelflife::{query_known_project,
+                query_known_namespace,
+                remove_item_from_db,
+                view_db_namespace_table,
+                Result};
 
 fn main() -> Result<()> {
     dotenv().ok();
@@ -43,6 +47,9 @@ fn main() -> Result<()> {
     } else if args.iter().any(|x| x == "d") {
         // If you get a 'd' argument, try to get the next argument after that one and use that to attempt to delete a db item.
         let _command = remove_item_from_db(&mongo_client, args.last().unwrap().to_string());
+    } else if args.iter().any(|x| x == "p") {
+        let command = query_known_project(&http_client, token, endpoint, args.last().unwrap().to_string());
+        dbg!(Some(command)); 
     } else {
         println!(
             "{}{}",
@@ -50,8 +57,9 @@ fn main() -> Result<()> {
             "    d <namespace>     Delete namespace out of MongoDB\n".to_string()
                 + &"    k <namespace>     Query API and Database for a known namespace\n"
                     .to_string()
-                + &"    v                 Print namespaces currently tracked in MongoDB"
+                + &"    v                 Print namespaces currently tracked in MongoDB\n"
                     .to_string()
+                + &"    p <project>       Query API for a known project"
         );
     }
     Ok(())
