@@ -69,55 +69,27 @@ fn main() -> Result<()> {
         .get_matches();
 
     let mut collection = "namespaces";
-    match matches.occurrences_of("whitelist") {
-        0 => {}
-        _ => {
-            collection = "whitelist";
-        }
+    if matches.occurrences_of("whitelist") > 0 {
+        collection = "whitelist";
     }
-
-    match matches.value_of("delete") {
-        None => {}
-        _ => {
-            let _command = remove_item_from_db_table(
-                &mongo_client,
-                collection.to_string(),
-                matches.value_of("delete").unwrap().to_string());
-        }
+  
+    if let Some(deleted) = matches.value_of("delete") {
+        remove_item_from_db_table(&mongo_client, collection, deleted)?;
     }
     
-    match matches.value_of("known") {
-        None => {}
-        _ => {
-            let namespace = matches.value_of("known").unwrap().to_string();
-            let _command = query_known_namespace(
-                &mongo_client,
-                collection.to_string(),
-                &http_client,
-                token.to_string(),
-                endpoint.to_string(),
-                namespace
-            );
-        }
+    if let Some(known_namespace) = matches.value_of("known") {
+        query_known_namespace(&mongo_client, collection, &http_client, &token, &endpoint, known_namespace)?;
     }
 
-    match matches.value_of("project") {
-        None => {}
-        _ => {
-            let call = format!("https://{}/oapi/v1/projects/{}", endpoint, &matches.value_of("project").unwrap().to_string());
-            let command = make_api_call(
-                &http_client,
-                call,
-                token);
-            dbg!(Some(command)); 
-        }
+    if let Some(project_name) = matches.value_of("project") {
+        let call = format!("https://{}/oapi/v1/projects/{}", endpoint, project_name);
+        let result = make_api_call(&http_client, &call, &token)?;
+        dbg!(result);
     }
 
-    match matches.occurrences_of("view") {
-        0 => {}
-        _ => {
-            let _command = view_db_table(&mongo_client, collection.to_string());       
-        }
+    if matches.occurrences_of("view") > 0 {
+        view_db_table(&mongo_client, collection)?;
     }
+
     Ok(())
 }
