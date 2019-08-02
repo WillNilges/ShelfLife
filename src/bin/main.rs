@@ -69,12 +69,12 @@ fn main() -> Result<()> {
         .get_matches();
 
     let mut collection = "namespaces";
-    if let Some(namespace) = matches.value_of("whitelist") {
-      collection = "whitelist";
+    if matches.occurrences_of("whitelist") > 0 {
+        collection = "whitelist";
     }
   
     if let Some(deleted) = matches.value_of("delete") {
-        remove_item_from_db_namespace_table(&mongo_client, collection, deleted)?;
+        remove_item_from_db_table(&mongo_client, collection, deleted)?;
     }
     
     if let Some(known_namespace) = matches.value_of("known") {
@@ -88,7 +88,7 @@ fn main() -> Result<()> {
     }
 
     if matches.occurrences_of("view") > 0 {
-        view_db_namespace_table(&mongo_client, collection)?;
+        view_db_table(&mongo_client, collection)?;
     }
 
     Ok(())

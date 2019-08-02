@@ -28,7 +28,7 @@ pub fn make_api_call(
 
 pub fn query_known_namespace(
     mongo_client: &mongodb::Client,
-    collection: String,
+    collection: &str,
     http_client: &reqwest::Client,
     token: &str,
     endpoint: &str,
@@ -52,7 +52,7 @@ pub fn query_known_namespace(
     );
 
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db_table(mongo_client, collection.to_string())?;
+    let current_table: Vec<DBItem> = get_db_table(mongo_client, &collection)?;
     
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
     let queried_namespace = namespace_info.name.to_string();
@@ -80,7 +80,7 @@ pub fn query_known_namespace(
                     println!("\nUnknown table:");
                 }
             }
-            let _table_add = add_item_to_db_table(mongo_client, collection, namespace_info);
+            let _table_add = add_item_to_db_table(mongo_client, &collection, namespace_info);
         } else if input.trim() == "n" {
             println!("Ok.");
         } else {
@@ -243,7 +243,7 @@ fn get_shelflife_info(
     Ok(api_response)
 }
 
-fn get_db_table(mongo_client: &mongodb::Client, collection: String) -> Result<Vec<DBItem>> {
+fn get_db_table(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem>> {
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
         .collection(&collection);
@@ -279,9 +279,9 @@ fn get_db_table(mongo_client: &mongodb::Client, collection: String) -> Result<Ve
     Ok(namespace_table)
 }
 
-pub fn view_db_table(mongo_client: &mongodb::Client, collection: String) -> Result<()> {
+pub fn view_db_table(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db_table(mongo_client, collection.to_string())?;
+    let current_table: Vec<DBItem> = get_db_table(mongo_client, collection)?;
     match collection.as_ref() {
         "namespaces" => {
             println!("\nProjects with ShelfLives:");
@@ -306,7 +306,7 @@ pub fn view_db_table(mongo_client: &mongodb::Client, collection: String) -> Resu
     Ok(())
 }
 
-fn add_item_to_db_table(mongo_client: &mongodb::Client, collection: String, item: DBItem) -> Result<()> {
+fn add_item_to_db_table(mongo_client: &mongodb::Client, collection: &str, item: DBItem) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
@@ -315,7 +315,7 @@ fn add_item_to_db_table(mongo_client: &mongodb::Client, collection: String, item
     Ok(())
 }
 
-pub fn remove_item_from_db_namespace_table(mongo_client: &mongodb::Client, collection: &str, namespace: &str) -> Result<()> {
+pub fn remove_item_from_db_table(mongo_client: &mongodb::Client, collection: &str, namespace: &str) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
