@@ -28,6 +28,7 @@ pub fn make_api_call(
 
 pub fn query_known_namespace(
     mongo_client: &mongodb::Client,
+    collection: String,
     http_client: &reqwest::Client,
     token: &str,
     endpoint: &str,
@@ -51,7 +52,7 @@ pub fn query_known_namespace(
     );
 
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db_namespace_table(mongo_client)?;
+    let current_table: Vec<DBItem> = get_db_table(mongo_client, collection.to_string())?;
     
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
     let queried_namespace = namespace_info.name.to_string();
@@ -68,8 +69,18 @@ pub fn query_known_namespace(
             .read_line(&mut input)
             .expect("Could not read response");
         if input.trim() == "y" {
-            println!("Putting a ShelfLife on {}", queried_namespace);
-            let _table_add = add_item_to_db_namespace_table(mongo_client, namespace_info);
+             match collection.as_ref() {
+                "namespaces" => {
+                    println!("Putting a ShelfLife on {}", queried_namespace);
+                }
+                "whitelist" => {
+                    println!("Whitelisting {}", queried_namespace);
+                }
+                _ => {
+                    println!("\nUnknown table:");
+                }
+            }
+            let _table_add = add_item_to_db_table(mongo_client, collection, namespace_info);
         } else if input.trim() == "n" {
             println!("Ok.");
         } else {
@@ -117,6 +128,37 @@ fn get_shelflife_info(
                 "Error! Could not fetch namespace information.",
             ));
         }
+    }
+
+    // Query for build information.
+    // Formulate the call
+    let buildlist_call = format!(
+        "https://{}/apis/build.openshift.io/v1/namespaces/{}/builds",
+        endpoint, namespace
+    );
+    // Make the call
+    let mut buildlist_resp = http_client
+        .get(&buildlist_call)
+        .header("Authorization", &token)
+        .send()?;
+    // Ensure the call was successful
+    match buildlist_resp.status() {
+        StatusCode::OK => {}
+        StatusCode::FORBIDDEN => {
+            return Err(From::from(
+                "Error! Could not fetch build information. Bad API token or wrong namespace?",
+            ))
+        }
+        _ => {
+            return Err(From::from(
+                "Error! Could not fetch build information.",
+            ))
+        }
+    }
+    let buildlist_json: BuildlistResponse = buildlist_resp.json()?; // Bind json of reply to struct.
+    let mut last_builds = Vec::new();
+    for item in buildlist_json.items {
+        last_builds.push(item.status.completion_timestamp);
     }
 
     // Query for deployment configs (for their build dates)
@@ -201,10 +243,10 @@ fn get_shelflife_info(
     Ok(api_response)
 }
 
-fn get_db_namespace_table(mongo_client: &mongodb::Client) -> Result<Vec<DBItem>> {
+fn get_db_table(mongo_client: &mongodb::Client, collection: String) -> Result<Vec<DBItem>> {
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
-        .collection("namespaces");
+        .collection(&collection);
     let mut namespace_table = Vec::new(); // The vec of namespace information we're gonna send back.
 
     // Find the document and receive a cursor
@@ -237,10 +279,20 @@ fn get_db_namespace_table(mongo_client: &mongodb::Client) -> Result<Vec<DBItem>>
     Ok(namespace_table)
 }
 
-pub fn view_db_namespace_table(mongo_client: &mongodb::Client) -> Result<()> {
+pub fn view_db_table(mongo_client: &mongodb::Client, collection: String) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db_namespace_table(mongo_client)?;
-    println!("\nCurrent Table of Projects:");
+    let current_table: Vec<DBItem> = get_db_table(mongo_client, collection.to_string())?;
+    match collection.as_ref() {
+        "namespaces" => {
+            println!("\nProjects with ShelfLives:");
+        }
+        "whitelist" => {
+            println!("\nWhitelisted projects:");
+        }
+        _ => {
+            println!("\nUnknown table:");
+        }
+    }
     let mut db_table = Table::new(); // Create the table
     db_table.add_row(row!["Namespace", "Admins", "Latest Deployment"]); // Add a row per time
     for row in &current_table {
@@ -254,20 +306,20 @@ pub fn view_db_namespace_table(mongo_client: &mongodb::Client) -> Result<()> {
     Ok(())
 }
 
-fn add_item_to_db_namespace_table(mongo_client: &mongodb::Client, item: DBItem) -> Result<()> {
+fn add_item_to_db_table(mongo_client: &mongodb::Client, collection: String, item: DBItem) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
-        .collection("namespaces");
+        .collection(&collection);
     coll.insert_one(doc!{"name": item.name, "admins": bson::to_bson(&item.admins)?, "last_deployment": item.last_deployment}, None).unwrap();
     Ok(())
 }
 
-pub fn remove_item_from_db_namespace_table(mongo_client: &mongodb::Client, namespace: &str) -> Result<()> {
+pub fn remove_item_from_db_namespace_table(mongo_client: &mongodb::Client, collection: &str, namespace: &str) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
-        .collection("namespaces");
+        .collection(collection);
     coll.find_one_and_delete(doc! {"name": namespace}, None)
         .unwrap();
     println!("{} has been removed.", namespace);

@@ -3,14 +3,14 @@ extern crate clap;
 extern crate dotenv;
 
 use std::env;
-use clap::{Arg, App};
+use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
 use shelflife::{make_api_call,
                 query_known_namespace,
-                remove_item_from_db_namespace_table,
-                view_db_namespace_table,
+                remove_item_from_db_table,
+                view_db_table,
                 Result};
 
 fn main() -> Result<()> {
@@ -39,6 +39,7 @@ fn main() -> Result<()> {
         .version("0.0.5 or something")
         .author("Willard N. <willnilges@mail.rit.edu>")
         .about("Automatic management of spin-down and deletion of OKD projects.")
+        .setting(AppSettings::ArgRequiredElseHelp) 
         .arg(Arg::with_name("delete")
             .short("d")
             .long("delete")
@@ -61,14 +62,23 @@ fn main() -> Result<()> {
             .short("v")
             .long("view")
             .help("Print namespaces currently tracked in MongoDB"))
+        .arg(Arg::with_name("whitelist")
+            .short("w")
+            .long("whitelist")
+            .help("Determines working with the whitelist or the shelflife table."))
         .get_matches();
 
+    let mut collection = "namespaces";
+    if let Some(namespace) = matches.value_of("whitelist") {
+      collection = "whitelist";
+    }
+  
     if let Some(deleted) = matches.value_of("delete") {
-        remove_item_from_db_namespace_table(&mongo_client, deleted)?;
+        remove_item_from_db_namespace_table(&mongo_client, collection, deleted)?;
     }
     
     if let Some(known_namespace) = matches.value_of("known") {
-        query_known_namespace(&mongo_client, &http_client, &token, &endpoint, known_namespace)?;
+        query_known_namespace(&mongo_client, collection, &http_client, &token, &endpoint, known_namespace)?;
     }
 
     if let Some(project_name) = matches.value_of("project") {
@@ -78,7 +88,7 @@ fn main() -> Result<()> {
     }
 
     if matches.occurrences_of("view") > 0 {
-        view_db_namespace_table(&mongo_client)?;
+        view_db_namespace_table(&mongo_client, collection)?;
     }
 
     Ok(())
