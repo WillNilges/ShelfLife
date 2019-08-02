@@ -16,11 +16,11 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 // Make a call to the Openshift API about some namespace info.
 pub fn make_api_call(
     http_client: &reqwest::Client,
-    call: String,
-    token: String,
+    call: &str,
+    token: &str,
 ) -> Result<reqwest::Response> {
     let project_resp = http_client 
-        .get(&call)
+        .get(call)
         .header("Authorization", format!("Bearer {}", token))
         .send()?;
     Ok(project_resp)
@@ -29,9 +29,9 @@ pub fn make_api_call(
 pub fn query_known_namespace(
     mongo_client: &mongodb::Client,
     http_client: &reqwest::Client,
-    token: String,
-    endpoint: String,
-    namespace: String,
+    token: &str,
+    endpoint: &str,
+    namespace: &str,
 ) -> Result<()> {
     // Query a project. Use their namespace to get their admin usernames and the last time they were built.
     println!(
@@ -40,9 +40,9 @@ pub fn query_known_namespace(
     );
     let namespace_info = get_shelflife_info(
         http_client,
-        token.to_string(),
-        endpoint.to_string(),
-        namespace.to_string(),
+        token,
+        endpoint,
+        namespace,
     )?;
     print!("\n > > > API Response > > > ");
     println!(
@@ -84,9 +84,9 @@ pub fn query_known_namespace(
 // Queries the API and returns a Struct with data relevant for shelflife's operation.
 fn get_shelflife_info(
     http_client: &reqwest::Client,
-    token: String,
-    endpoint: String,
-    namespace: String,
+    token: &str,
+    endpoint: &str,
+    namespace: &str,
 ) -> Result<DBItem> {
     let token = format!("Bearer {}", token); // Set up token
 
@@ -189,7 +189,7 @@ fn get_shelflife_info(
 
     // Build the API response
     let api_response = DBItem {
-        name: namespace,
+        name: namespace.to_string(),
         admins: rolebindings_json_vector,
         last_deployment:
             match last_deployments.first() {
@@ -263,13 +263,13 @@ fn add_item_to_db_namespace_table(mongo_client: &mongodb::Client, item: DBItem) 
     Ok(())
 }
 
-pub fn remove_item_from_db_namespace_table(mongo_client: &mongodb::Client, namespace: String) -> Result<()> {
+pub fn remove_item_from_db_namespace_table(mongo_client: &mongodb::Client, namespace: &str) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
         .collection("namespaces");
-    coll.find_one_and_delete(doc! {"name": &namespace}, None)
+    coll.find_one_and_delete(doc! {"name": namespace}, None)
         .unwrap();
-    println!("{} has been removed.", &namespace);
+    println!("{} has been removed.", namespace);
     Ok(())
 }
