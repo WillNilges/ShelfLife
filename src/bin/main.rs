@@ -3,14 +3,14 @@ extern crate clap;
 extern crate dotenv;
 
 use std::env;
-use clap::{Arg, App};
+use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
 use shelflife::{make_api_call,
                 query_known_namespace,
-                remove_item_from_db_namespace_table,
-                view_db_namespace_table,
+                remove_item_from_db_table,
+                view_db_table,
                 Result};
 
 fn main() -> Result<()> {
@@ -39,6 +39,7 @@ fn main() -> Result<()> {
         .version("0.0.5 or something")
         .author("Willard N. <willnilges@mail.rit.edu>")
         .about("Automatic management of spin-down and deletion of OKD projects.")
+        .setting(AppSettings::ArgRequiredElseHelp) 
         .arg(Arg::with_name("delete")
             .short("d")
             .long("delete")
@@ -61,17 +62,27 @@ fn main() -> Result<()> {
             .short("v")
             .long("view")
             .help("Print namespaces currently tracked in MongoDB"))
+        .arg(Arg::with_name("whitelist")
+            .short("w")
+            .long("whitelist")
+            .help("Determines working with the whitelist or the shelflife table."))
         .get_matches();
+
+    let mut collection = "namespaces";
+    match matches.occurrences_of("whitelist") {
+        0 => {}
+        _ => {
+            collection = "whitelist";
+        }
+    }
 
     match matches.value_of("delete") {
         None => {}
         _ => {
-            let _command = remove_item_from_db_namespace_table(
+            let _command = remove_item_from_db_table(
                 &mongo_client,
-                matches
-                    .value_of("delete")
-                    .unwrap()
-                    .to_string());
+                collection.to_string(),
+                matches.value_of("delete").unwrap().to_string());
         }
     }
     
@@ -81,6 +92,7 @@ fn main() -> Result<()> {
             let namespace = matches.value_of("known").unwrap().to_string();
             let _command = query_known_namespace(
                 &mongo_client,
+                collection.to_string(),
                 &http_client,
                 token.to_string(),
                 endpoint.to_string(),
@@ -104,7 +116,7 @@ fn main() -> Result<()> {
     match matches.occurrences_of("view") {
         0 => {}
         _ => {
-            let _command = view_db_namespace_table(&mongo_client);       
+            let _command = view_db_table(&mongo_client, collection.to_string());       
         }
     }
     Ok(())

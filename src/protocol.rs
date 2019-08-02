@@ -1,6 +1,25 @@
 use serde::Deserialize;
 //use chrono::{DateTime, FixedOffset};
 
+// Structs for Build
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildStatus {
+    pub completion_timestamp: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildItem {
+    pub status: BuildStatus,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildlistResponse {
+    pub items: Vec<BuildItem>,
+}
+
 // Structs for Deployment
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
