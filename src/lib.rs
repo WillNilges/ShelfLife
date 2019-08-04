@@ -10,6 +10,7 @@ use mongodb::{bson, doc, Bson, ThreadedClient};
 use prettytable::Table;
 use protocol::*;
 use reqwest::StatusCode;
+use chrono::{DateTime, FixedOffset};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -109,19 +110,18 @@ fn get_shelflife_info(
 ) -> Result<DBItem> {
     // Query for builds
     // Formulate the call
-
-    let buildlist_call = format!(
+    let builds_call = format!(
         "https://{}/apis/build.openshift.io/v1/namespaces/{}/builds",
         endpoint, namespace
     );
-    let buildlist_resp = call_api(&http_client, &buildlist_call, &token); // Make the call
-    let buildlist_json: BuildlistResponse = buildlist_resp?.json()?; // Bind json of reply to struct.
-    let mut last_builds = Vec::new();
-    for item in buildlist_json.items {
-        last_builds.push(item.status.completion_timestamp);
+    let builds_resp = call_api(&http_client, &builds_call, &token); // Make the call
+    let builds_json: BuildlistResponse = builds_resp?.json()?; // Bind json of reply to struct.
+    let mut builds = Vec::new();
+    for item in builds_json.items {
+        builds.push(DateTime::parse_from_rfc3339(&item.status.completion_timestamp));
     }
-
-    // Query for deployment configs
+    
+    // Query deployment configs
     // Formulate the call
     let deploycfgs_call = format!(
         "https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs",
@@ -130,14 +130,34 @@ fn get_shelflife_info(
     let deploycfgs_resp = call_api(&http_client, &deploycfgs_call, &token); // Make the call
     let deploycfgs_json: DeploymentResponse = deploycfgs_resp?.json()?; // Bind json of reply to struct.
     // Get the timestamp of the last deployments.
-    let mut last_deploys = Vec::new();
+    let mut deploys = Vec::new();
     for config in deploycfgs_json.items {
         for condition in config.status.conditions {
-            last_deploys.push(condition.last_update_time);
+            deploys.push(DateTime::parse_from_rfc3339(&condition.last_update_time));
         }
     }
+   
     
-    // Query for rolebindings (for the admins of the namespace)
+    // Default to using latest deploymentconfig date if there are no builds available,
+    // Otherwise compare build dates to see if there's a later one that can be used
+    // instead.
+    let latest_deploy = deploys.last().unwrap().unwrap();
+    let mut latest_update = latest_deploy;
+    let mut cause = "Deployment";
+    if builds.len() != 0 {
+        let latest_build = builds.last().unwrap().unwrap();
+        // If the app was deployed after it was built, use the deploy time as the latest
+        // update, otherwise, use the build time.
+        if latest_deploy.signed_duration_since(latest_build) > chrono::Duration::seconds(0) {
+            latest_update = latest_deploy;
+            cause = "Deployment";
+        } else {
+            latest_update = latest_build;
+            cause = "Build";
+        }
+    }
+
+    // Query rolebindings for the admins of the namespace
     let rolebdgs_call = format!(
         "https://{}/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings",
         endpoint, namespace
@@ -156,12 +176,8 @@ fn get_shelflife_info(
     let api_response = DBItem {
         name: namespace.to_string(),
         admins: rolebdgs,
-        last_update:
-            match last_deploys.first() {
-                Some(ref x) => x.to_string(),
-                _ => "N/A".to_string(),
-            },
-        cause: "Deployment".to_string(), 
+        last_update: latest_update.to_string(),
+        cause: cause.to_string(), 
     };
     Ok(api_response)
 }
@@ -189,7 +205,7 @@ fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem
                     doc_admins.push(item.to_string());
                 }
             }
-            if let Some(&Bson::String(ref last_deployment)) = item.get("last_deployment") {
+            if let Some(&Bson::String(ref last_deployment)) = item.get("last_update") {
                 doc_last_deployment = last_deployment.to_string();
             }
             let namespace_document = DBItem {
@@ -235,6 +251,7 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
 
 fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
+    dbg!(&item.last_update);
     let coll = mongo_client
         .db("SHELFLIFE_NAMESPACES")
         .collection(&collection);
