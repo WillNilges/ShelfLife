@@ -1,6 +1,26 @@
 use serde::Deserialize;
 //use chrono::{DateTime, FixedOffset};
 
+// Structs for pods
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodMetadata {
+    pub creation_timestamp: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodItem {
+    pub metadata: PodMetadata, 
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodsResponse {
+    pub items: Vec<PodItem>,
+}
+
+
 // Structs for Build
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +39,7 @@ pub struct BuildItem {
 pub struct BuildlistResponse {
     pub items: Vec<BuildItem>,
 }
+
 
 // Structs for Deployment
 #[derive(Debug, Deserialize)]
@@ -45,6 +66,7 @@ pub struct DeploymentResponse {
     pub items: Vec<DeploymentItem>,
 }
 
+
 // Structs for Rolebindings
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,9 +87,11 @@ pub struct RolebindingsResponse {
     pub items: Vec<RolebindingsItem>,
 }
 
+
 // Struct to represent a DB Object
 pub struct DBItem {
     pub name: String,
     pub admins: Vec<String>,
-    pub last_deployment: String,
+    pub last_update: String,
+    pub cause: String,
 }

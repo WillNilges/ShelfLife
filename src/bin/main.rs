@@ -7,10 +7,10 @@ use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
-use shelflife::{make_api_call,
+use shelflife::{call_api,
                 query_known_namespace,
-                remove_item_from_db_table,
-                view_db_table,
+                remove_db_item,
+                view_db,
                 Result};
 
 fn main() -> Result<()> {
@@ -74,21 +74,25 @@ fn main() -> Result<()> {
     }
   
     if let Some(deleted) = matches.value_of("delete") {
-        remove_item_from_db_table(&mongo_client, collection, deleted)?;
+        remove_db_item(&mongo_client, collection, deleted)?;
     }
     
     if let Some(known_namespace) = matches.value_of("known") {
         query_known_namespace(&mongo_client, collection, &http_client, &token, &endpoint, known_namespace)?;
+        //let call = "https://okd.csh.rit.edu:8443/apis/build.openshift.io/v1/namespaces/swag/builds";
+        //let call = "https://okd.csh.rit.edu:8443/apis/apps.openshift.io/v1/namespaces/swag/deploymentconfigs";
+        //let result = call_api(&http_client, &call, &token);
+        //dbg!(result);
     }
 
     if let Some(project_name) = matches.value_of("project") {
         let call = format!("https://{}/oapi/v1/projects/{}", endpoint, project_name);
-        let result = make_api_call(&http_client, &call, &token)?;
+        let result = call_api(&http_client, &call, &token)?;
         dbg!(result);
     }
 
     if matches.occurrences_of("view") > 0 {
-        view_db_table(&mongo_client, collection)?;
+        view_db(&mongo_client, collection)?;
     }
 
     Ok(())
