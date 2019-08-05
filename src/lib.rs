@@ -10,29 +10,24 @@ use mongodb::{bson, doc, Bson, ThreadedClient};
 use prettytable::Table;
 use protocol::*;
 use reqwest::StatusCode;
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, Utc};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-// Make a call to the Openshift API about some namespace info.
-pub fn call_api(
+pub fn query_available_namespaces(
+    mongo_client: &mongodb::Client,
+    collection: &str,
     http_client: &reqwest::Client,
-    call: &str,
     token: &str,
-) -> Result<reqwest::Response> {
-    let response = http_client 
-        .get(call)
-        .header("Authorization", format!("Bearer {}", token))
-        .send()?;
+    endpoint: &str,
+) {
+    let namespaces_call = format!(
+        "https://{}/api/v1/namespaces",
+        endpoint
+    );
 
-    // Ensure the call was successful
-    if response.status() == StatusCode::OK {
-        Ok(response)
-    } else {
-        return Err(From::from(format!(
-            "Error! Could not run API call. Call: {}, Code: {}", call, response.status()),
-        ));
-    }
+    let namespaces_resp = call_api(&http_client, &namespaces_call, &token); // Make the call
+    dbg!(namespaces_resp);
 }
 
 pub fn query_known_namespace(
@@ -100,7 +95,6 @@ pub fn query_known_namespace(
     Ok(())
 }
 
-
 // Queries the API and returns a Struct with data relevant for shelflife's operation.
 fn get_shelflife_info(
     http_client: &reqwest::Client,
@@ -136,7 +130,6 @@ fn get_shelflife_info(
             deploys.push(DateTime::parse_from_rfc3339(&condition.last_update_time));
         }
     }
-   
     
     // Default to using latest deploymentconfig date if there are no builds available,
     // Otherwise compare build dates to see if there's a later one that can be used
@@ -176,12 +169,57 @@ fn get_shelflife_info(
     let api_response = DBItem {
         name: namespace.to_string(),
         admins: rolebdgs,
-        last_update: latest_update.to_string(),
+        last_update: latest_update.to_rfc2822(),
         cause: cause.to_string(), 
     };
     Ok(api_response)
 }
 
+pub fn check_expiry_dates(mongo_client: &mongodb::Client, collection: &str) {
+    let namespaces: Vec<DBItem> = get_db(mongo_client, collection).unwrap();
+    for item in namespaces.iter(){
+        let last_update = DateTime::parse_from_rfc2822(&item.last_update);
+
+        let last_update_unwrapped = Some(last_update);
+
+        match last_update {
+            Ok(last_update_unwrapped) => {
+                let age = Utc::now().signed_duration_since(last_update_unwrapped);
+
+                if age > chrono::Duration::weeks(20) { // Check longest first, decending.
+                    println!("The last update to {} was more than 20 weeks ago.", &item.name);
+                }else if age > chrono::Duration::weeks(16) {
+                    println!("The last update to {} was more than 16 weeks ago.", &item.name);
+                }else  if age > chrono::Duration::weeks(12) {
+                    println!("The last update to {} was more than 12 weeks ago.", &item.name);
+                }
+
+            }
+            Err(_) => {}
+        }
+    }
+}
+
+// Make a call to the Openshift API about some namespace info.
+pub fn call_api(
+    http_client: &reqwest::Client,
+    call: &str,
+    token: &str,
+) -> Result<reqwest::Response> {
+    let response = http_client 
+        .get(call)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()?;
+
+    // Ensure the call was successful
+    if response.status() == StatusCode::OK {
+        Ok(response)
+    } else {
+        return Err(From::from(format!(
+            "Error! Could not run API call. Call: {}, Code: {}", call, response.status()),
+        ));
+    }
+}
 
 fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem>> {
     let coll = mongo_client

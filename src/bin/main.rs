@@ -7,8 +7,10 @@ use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
-use shelflife::{call_api,
+use shelflife::{query_available_namespaces,
                 query_known_namespace,
+                check_expiry_dates,
+                call_api,
                 remove_db_item,
                 view_db,
                 Result};
@@ -39,7 +41,11 @@ fn main() -> Result<()> {
         .version("0.0.5 or something")
         .author("Willard N. <willnilges@mail.rit.edu>")
         .about("Automatic management of spin-down and deletion of OKD projects.")
-        .setting(AppSettings::ArgRequiredElseHelp) 
+        .setting(AppSettings::ArgRequiredElseHelp)
+        .arg(Arg::with_name("all")
+            .short("a")
+            .long("all")
+            .help("Queries all available namespaces")) 
         .arg(Arg::with_name("delete")
             .short("d")
             .long("delete")
@@ -65,14 +71,19 @@ fn main() -> Result<()> {
         .arg(Arg::with_name("whitelist")
             .short("w")
             .long("whitelist")
-            .help("Determines working with the whitelist or the shelflife table."))
+            .help("Determines working with the whitelist or the shelflife table"))
         .get_matches();
 
     let mut collection = "namespaces";
     if matches.occurrences_of("whitelist") > 0 {
         collection = "whitelist";
     }
-  
+
+    if matches.occurrences_of("all") > 0 {
+        //query_available_namespaces(&mongo_client, collection, &http_client, &token, &endpoint);
+        check_expiry_dates(&mongo_client, collection);
+    }
+ 
     if let Some(deleted) = matches.value_of("delete") {
         remove_db_item(&mongo_client, collection, deleted)?;
     }
