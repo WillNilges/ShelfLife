@@ -7,8 +7,7 @@ use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
-use shelflife::{query_available_namespaces,
-                query_known_namespace,
+use shelflife::{query_known_namespace,
                 check_expiry_dates,
                 call_api,
                 remove_db_item,
@@ -17,7 +16,6 @@ use shelflife::{query_available_namespaces,
 
 fn main() -> Result<()> {
     dotenv().ok();
-    let token = env::var("OKD_TOKEN")?;
     let endpoint = env::var("ENDPOINT")?;
     
     let http_client = reqwest::Client::new();
@@ -80,8 +78,7 @@ fn main() -> Result<()> {
     }
 
     if matches.occurrences_of("all") > 0 {
-        //query_available_namespaces(&mongo_client, collection, &http_client, &token, &endpoint);
-        check_expiry_dates(&mongo_client, collection);
+        let _expiration = check_expiry_dates(&mongo_client, collection);
     }
  
     if let Some(deleted) = matches.value_of("delete") {
@@ -89,7 +86,7 @@ fn main() -> Result<()> {
     }
     
     if let Some(known_namespace) = matches.value_of("known") {
-        query_known_namespace(&mongo_client, collection, &http_client, &token, &endpoint, known_namespace)?;
+        query_known_namespace(&mongo_client, collection, &http_client, known_namespace)?;
         //let call = "https://okd.csh.rit.edu:8443/apis/build.openshift.io/v1/namespaces/swag/builds";
         //let call = "https://okd.csh.rit.edu:8443/apis/apps.openshift.io/v1/namespaces/swag/deploymentconfigs";
         //let result = call_api(&http_client, &call, &token);
@@ -98,7 +95,7 @@ fn main() -> Result<()> {
 
     if let Some(project_name) = matches.value_of("project") {
         let call = format!("https://{}/oapi/v1/projects/{}", endpoint, project_name);
-        let result = call_api(&http_client, &call, &token)?;
+        let result = call_api(&http_client, &call)?;
         dbg!(result);
     }
 

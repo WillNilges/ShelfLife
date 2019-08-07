@@ -2,8 +2,10 @@ extern crate mongodb;
 extern crate reqwest;
 #[macro_use]
 extern crate prettytable;
-
 pub mod protocol;
+extern crate lettre;
+extern crate lettre_email;
+extern crate dotenv;
 
 use mongodb::db::ThreadedDatabase;
 use mongodb::{bson, doc, Bson, ThreadedClient};
@@ -11,41 +13,28 @@ use prettytable::Table;
 use protocol::*;
 use reqwest::StatusCode;
 use chrono::{DateTime, Utc};
+use lettre::smtp::authentication::{Credentials, Mechanism};
+use lettre::{Transport, SmtpClient};
+use lettre::smtp::ConnectionReuseParameters;
+use lettre_email::Email;
+use std::env;
+use dotenv::dotenv;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
-pub fn query_available_namespaces(
-    mongo_client: &mongodb::Client,
-    collection: &str,
-    http_client: &reqwest::Client,
-    token: &str,
-    endpoint: &str,
-) {
-    let namespaces_call = format!(
-        "https://{}/api/v1/namespaces",
-        endpoint
-    );
-
-    let namespaces_resp = call_api(&http_client, &namespaces_call, &token); // Make the call
-    dbg!(namespaces_resp);
-}
 
 pub fn query_known_namespace(
     mongo_client: &mongodb::Client,
     collection: &str,
     http_client: &reqwest::Client,
-    token: &str,
-    endpoint: &str,
     namespace: &str,
 ) -> Result<()> {
+    dotenv().ok();
     println!(
         "{}",
         format!("\nQuerying API for namespace {}...", namespace).to_string()
     );
     let namespace_info = get_shelflife_info(
         http_client,
-        token,
-        endpoint,
         namespace,
     )?;
     print!("\n > > > API Response > > > ");
@@ -98,17 +87,17 @@ pub fn query_known_namespace(
 // Queries the API and returns a Struct with data relevant for shelflife's operation.
 fn get_shelflife_info(
     http_client: &reqwest::Client,
-    token: &str,
-    endpoint: &str,
     namespace: &str,
 ) -> Result<DBItem> {
+    dotenv().ok();
+    let endpoint = env::var("ENDPOINT")?; 
     // Query for builds
     // Formulate the call
     let builds_call = format!(
         "https://{}/apis/build.openshift.io/v1/namespaces/{}/builds",
         endpoint, namespace
     );
-    let builds_resp = call_api(&http_client, &builds_call, &token); // Make the call
+    let builds_resp = call_api(&http_client, &builds_call); // Make the call
     let builds_json: BuildlistResponse = builds_resp?.json()?; // Bind json of reply to struct.
     let mut builds = Vec::new();
     for item in builds_json.items {
@@ -121,7 +110,7 @@ fn get_shelflife_info(
         "https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs",
         endpoint, namespace
     );
-    let deploycfgs_resp = call_api(&http_client, &deploycfgs_call, &token); // Make the call
+    let deploycfgs_resp = call_api(&http_client, &deploycfgs_call); // Make the call
     let deploycfgs_json: DeploymentResponse = deploycfgs_resp?.json()?; // Bind json of reply to struct.
     // Get the timestamp of the last deployments.
     let mut deploys = Vec::new();
@@ -155,7 +144,7 @@ fn get_shelflife_info(
         "https://{}/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings",
         endpoint, namespace
     );
-    let rolebdgs_resp = call_api(&http_client, &rolebdgs_call, &token);
+    let rolebdgs_resp = call_api(&http_client, &rolebdgs_call);
     let rolebdgs_json: RolebindingsResponse = rolebdgs_resp?.json()?;
     let rolebdgs: Vec<String> = rolebdgs_json
         .items
@@ -164,48 +153,90 @@ fn get_shelflife_info(
         .filter_map(|item| item.user_names)
         .flatten()
         .collect();
+    // Strip quotation marks off names.
+    let mut rolebindings = Vec::new();
+    for name in rolebdgs {
+        rolebindings.push(name.replace("\"", ""));
+    }
 
     // Build the response struct
     let api_response = DBItem {
         name: namespace.to_string(),
-        admins: rolebdgs,
+        admins: rolebindings,
         last_update: latest_update.to_rfc2822(),
         cause: cause.to_string(), 
     };
     Ok(api_response)
 }
 
-pub fn check_expiry_dates(mongo_client: &mongodb::Client, collection: &str) {
+pub fn check_expiry_dates(mongo_client: &mongodb::Client, collection: &str) -> Result<()>{
+    dotenv().ok();
+    let email_srv = env::var("EMAIL_SRV")?;
+    let email_uname = env::var("EMAIL_UNAME")?;
+    let email_passwd = env::var("EMAIL_PASSWD")?;
+    let email_addr = env::var("EMAIL_ADDRESS")?;
+    
+
+    let mut mailer = SmtpClient::new_simple(&email_srv).unwrap()
+        .credentials(Credentials::new(email_uname.to_string(), email_passwd.to_string()))
+        .smtp_utf8(true)
+        .authentication_mechanism(Mechanism::Plain)
+        .connection_reuse(ConnectionReuseParameters::ReuseUnlimited).transport();
+
     let namespaces: Vec<DBItem> = get_db(mongo_client, collection).unwrap();
     for item in namespaces.iter(){
         let last_update = DateTime::parse_from_rfc2822(&item.last_update);
-
-        let last_update_unwrapped = Some(last_update);
+        let _last_update_unwrapped = Some(last_update);
 
         match last_update {
             Ok(last_update_unwrapped) => {
                 let age = Utc::now().signed_duration_since(last_update_unwrapped);
-
-                if age > chrono::Duration::weeks(20) { // Check longest first, decending.
-                    println!("The last update to {} was more than 20 weeks ago.", &item.name);
+                let addr: &str = &*email_addr;
+                if age > chrono::Duration::weeks(24) { // Check longest first, decending.
+                    println!("The last update to {} was more than 24 weeks ago. D E L E T . . .", &item.name);
+                    for name in item.admins.iter() {
+                        let strpname = name.replace("\"", "");
+                        let email = Email::builder()
+                            .to((format!("{}@csh.rit.edu", strpname), strpname))
+                            .from(addr)
+                            .subject("Hi, I nuked your project :)")
+                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project on your usershare at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
+                            .build()
+                            .unwrap();
+                        let _mail_result = mailer.send(email.into());
+                    }
                 }else if age > chrono::Duration::weeks(16) {
                     println!("The last update to {} was more than 16 weeks ago.", &item.name);
+                    let email = Email::builder()
+                        .to(("wilnil@csh.rit.edu", "Will Nilges"))
+                        .from(addr)
+                        .subject("Your project's resources have been revoked.")
+                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 4 weeks.", &item.name, &item.last_update))
+                        .build()
+                        .unwrap();
+                    let _mail_result = mailer.send(email.into());
                 }else  if age > chrono::Duration::weeks(12) {
                     println!("The last update to {} was more than 12 weeks ago.", &item.name);
+                    let email = Email::builder()
+                        .to(("wilnil@csh.rit.edu", "Will Nilges"))
+                        .from(addr)
+                        .subject(format!("Old OKD project: {}", &item.name))
+                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
+                        .build()
+                        .unwrap();
+                    let _mail_result = mailer.send(email.into());
                 }
-
             }
             Err(_) => {}
         }
     }
+    mailer.close(); 
+    Ok(())
 }
 
 // Make a call to the Openshift API about some namespace info.
-pub fn call_api(
-    http_client: &reqwest::Client,
-    call: &str,
-    token: &str,
-) -> Result<reqwest::Response> {
+pub fn call_api(http_client: &reqwest::Client, call: &str,) -> Result<reqwest::Response> {
+    let token = env::var("OKD_TOKEN")?;
     let response = http_client 
         .get(call)
         .header("Authorization", format!("Bearer {}", token))
