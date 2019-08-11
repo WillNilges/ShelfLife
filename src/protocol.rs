@@ -51,12 +51,20 @@ pub struct DeploymentCondition {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentStatus {
+    pub replicas: u32,
     pub conditions: Vec<DeploymentCondition>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeploymentMetadata {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeploymentItem {
+    pub metadata: DeploymentMetadata,
     pub status: DeploymentStatus,
 }
 

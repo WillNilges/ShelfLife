@@ -69,7 +69,7 @@ pub fn query_known_namespace(
                     println!("Whitelisting {}", queried_namespace);
                 }
                 _ => {
-                    println!("\nUnknown table:");
+                    println!("Unknown table:");
                 }
             }
             let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
@@ -97,7 +97,7 @@ fn get_shelflife_info(
         "https://{}/apis/build.openshift.io/v1/namespaces/{}/builds",
         endpoint, namespace
     );
-    let builds_resp = call_api(&http_client, &builds_call); // Make the call
+    let builds_resp = get_call_api(&http_client, &builds_call); // Make the call
     let builds_json: BuildlistResponse = builds_resp?.json()?; // Bind json of reply to struct.
     let mut builds = Vec::new();
     for item in builds_json.items {
@@ -110,7 +110,7 @@ fn get_shelflife_info(
         "https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs",
         endpoint, namespace
     );
-    let deploycfgs_resp = call_api(&http_client, &deploycfgs_call); // Make the call
+    let deploycfgs_resp = get_call_api(&http_client, &deploycfgs_call); // Make the call
     let deploycfgs_json: DeploymentResponse = deploycfgs_resp?.json()?; // Bind json of reply to struct.
     // Get the timestamp of the last deployments.
     let mut deploys = Vec::new();
@@ -144,7 +144,7 @@ fn get_shelflife_info(
         "https://{}/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings",
         endpoint, namespace
     );
-    let rolebdgs_resp = call_api(&http_client, &rolebdgs_call);
+    let rolebdgs_resp = get_call_api(&http_client, &rolebdgs_call);
     let rolebdgs_json: RolebindingsResponse = rolebdgs_resp?.json()?;
     let rolebdgs: Vec<String> = rolebdgs_json
         .items
@@ -169,8 +169,10 @@ fn get_shelflife_info(
     Ok(api_response)
 }
 
-pub fn check_expiry_dates(mongo_client: &mongodb::Client, collection: &str) -> Result<()>{
-    dotenv().ok();
+pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb::Client, collection: &str) -> Result<()>{
+    dotenv().ok();   
+    let endpoint = env::var("ENDPOINT")?; 
+
     let email_srv = env::var("EMAIL_SRV")?;
     let email_uname = env::var("EMAIL_UNAME")?;
     let email_passwd = env::var("EMAIL_PASSWD")?;
@@ -193,8 +195,10 @@ pub fn check_expiry_dates(mongo_client: &mongodb::Client, collection: &str) -> R
                 let age = Utc::now().signed_duration_since(last_update_unwrapped);
                 let addr: &str = &*email_addr;
                 if age > chrono::Duration::weeks(24) { // Check longest first, decending.
-                    println!("The last update to {} was more than 24 weeks ago. D E L E T . . .", &item.name);
+                    println!("The last update to {} was more than 24 weeks ago. Deleting...", &item.name);
+
                     for name in item.admins.iter() {
+                        println!("Notifying {}", &strpname);
                         let strpname = name.replace("\"", "");
                         let email = Email::builder()
                             .to((format!("{}@csh.rit.edu", strpname), strpname))
@@ -205,26 +209,66 @@ pub fn check_expiry_dates(mongo_client: &mongodb::Client, collection: &str) -> R
                             .unwrap();
                         let _mail_result = mailer.send(email.into());
                     }
+
                 }else if age > chrono::Duration::weeks(16) {
                     println!("The last update to {} was more than 16 weeks ago.", &item.name);
-                    let email = Email::builder()
-                        .to(("wilnil@csh.rit.edu", "Will Nilges"))
-                        .from(addr)
-                        .subject("Your project's resources have been revoked.")
-                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 4 weeks.", &item.name, &item.last_update))
-                        .build()
-                        .unwrap();
-                    let _mail_result = mailer.send(email.into());
+                    println!("Spinning down...");
+
+                    // Query deployment configs that will need to be spun down.
+                    let deploycfgs_call = format!(
+                        "https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs",
+                        endpoint, &item.name
+                    );
+
+                    let deploycfgs_resp = get_call_api(&http_client, &deploycfgs_call); // Make the call
+                    let deploycfgs_json: DeploymentResponse = deploycfgs_resp?.json()?;
+                    let mut deploys = Vec::new();
+                    for item in deploycfgs_json.items {
+                        if item.status.replicas > 0 {
+                            println!("Spinning down {} replicas in {}", &item.status.replicas, &item.metadata.name);
+                            deploys.push(item.metadata.name);
+                        }
+                    }
+
+                    // Tell deploymentconfigs to scale down to 0 pods.
+                    for deployment in deploys {
+                        let call = format!(
+                            "https://{}/oapi/v1/namespaces/{}/deploymentconfigs/{}/scale",
+                            endpoint, &item.name, &deployment
+                        );
+                        let post = format!(
+                        "{{\"apiVersion\":\"extensions/v1beta1\",\"kind\":\"Scale\",\"metadata\":{{\"name\":\"{}\",\"namespace\":\"{}\"}},\"spec\":{{\"replicas\":0}}}}",
+                        &deployment, &item.name);
+                        let _result = put_call_api(&http_client, &call, String::from(&post))?;
+                    }
+
+                    println!("Notifying admins...");
+                    for name in item.admins.iter() {
+                        let strpname = name.replace("\"", "");
+                        println!("Notifying {}", &strpname);
+                        let email = Email::builder()
+                            .to((format!("{}@csh.rit.edu", strpname), strpname))
+                            .from(addr)
+                            .subject("Your project's resources have been revoked.")
+                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 4 weeks.", &item.name, &item.last_update))
+                            .build()
+                            .unwrap();
+                        let _mail_result = mailer.send(email.into());
+                    }
                 }else  if age > chrono::Duration::weeks(12) {
                     println!("The last update to {} was more than 12 weeks ago.", &item.name);
-                    let email = Email::builder()
-                        .to(("wilnil@csh.rit.edu", "Will Nilges"))
-                        .from(addr)
-                        .subject(format!("Old OKD project: {}", &item.name))
-                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
-                        .build()
-                        .unwrap();
-                    let _mail_result = mailer.send(email.into());
+                    for name in item.admins.iter() {
+                        let strpname = name.replace("\"", "");
+                        println!("Notifying {}", &strpname);
+                        let email = Email::builder()
+                            .to((format!("{}@csh.rit.edu", strpname), strpname))
+                            .from(addr)
+                            .subject(format!("Old OKD project: {}", &item.name))
+                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
+                            .build()
+                            .unwrap();
+                        let _mail_result = mailer.send(email.into());
+                    }
                 }
             }
             Err(_) => {}
@@ -235,13 +279,32 @@ pub fn check_expiry_dates(mongo_client: &mongodb::Client, collection: &str) -> R
 }
 
 // Make a call to the Openshift API about some namespace info.
-pub fn call_api(http_client: &reqwest::Client, call: &str,) -> Result<reqwest::Response> {
+pub fn get_call_api(http_client: &reqwest::Client, call: &str,) -> Result<reqwest::Response> {
     let token = env::var("OKD_TOKEN")?;
     let response = http_client 
         .get(call)
         .header("Authorization", format!("Bearer {}", token))
         .send()?;
 
+    // Ensure the call was successful
+    if response.status() == StatusCode::OK {
+        Ok(response)
+    } else {
+        return Err(From::from(format!(
+            "Error! Could not run API call. Call: {}, Code: {}", call, response.status()),
+        ));
+    }
+}
+
+pub fn put_call_api(http_client: &reqwest::Client, call: &str, post: String,) -> Result<reqwest::Response> {
+    dotenv().ok();
+    let token = env::var("OKD_TOKEN")?;
+    let response = http_client
+        .put(call)
+        .header("Authorization", format!("Bearer {}", token))
+        .body(post)
+        .send()?;
+     
     // Ensure the call was successful
     if response.status() == StatusCode::OK {
         Ok(response)

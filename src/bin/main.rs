@@ -9,7 +9,7 @@ use mongodb::ThreadedClient;
 
 use shelflife::{query_known_namespace,
                 check_expiry_dates,
-                call_api,
+                get_call_api,
                 remove_db_item,
                 view_db,
                 Result};
@@ -36,7 +36,6 @@ fn main() -> Result<()> {
     );
 
     let matches = App::new("ShelfLife")
-        .version("0.0.5 or something")
         .author("Willard N. <willnilges@mail.rit.edu>")
         .about("Automatic management of spin-down and deletion of OKD projects.")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -78,7 +77,7 @@ fn main() -> Result<()> {
     }
 
     if matches.occurrences_of("all") > 0 {
-        let _expiration = check_expiry_dates(&mongo_client, collection);
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection);
     }
  
     if let Some(deleted) = matches.value_of("delete") {
@@ -89,13 +88,13 @@ fn main() -> Result<()> {
         query_known_namespace(&mongo_client, collection, &http_client, known_namespace)?;
         //let call = "https://okd.csh.rit.edu:8443/apis/build.openshift.io/v1/namespaces/swag/builds";
         //let call = "https://okd.csh.rit.edu:8443/apis/apps.openshift.io/v1/namespaces/swag/deploymentconfigs";
-        //let result = call_api(&http_client, &call, &token);
+        //let result = get_call_api(&http_client, &call, &token);
         //dbg!(result);
     }
 
     if let Some(project_name) = matches.value_of("project") {
         let call = format!("https://{}/oapi/v1/projects/{}", endpoint, project_name);
-        let result = call_api(&http_client, &call)?;
+        let result = get_call_api(&http_client, &call)?;
         dbg!(result);
     }
 
