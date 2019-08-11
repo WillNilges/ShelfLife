@@ -33,9 +33,19 @@ To use this app, you'll need a few things:
   file to `.env` and then fill in the appropriate values.
 
 ## CLI Arguments
-Usage: shelflife [options...] <parameter>
-    d <namespace>     Delete namespace out of MongoDB
-    k <namespace>     Query API and Database for a known namespace
-    v                 Print namespaces currently tracked in MongoDB
-    p <project>       Query API for a known project
+```
+USAGE:
+    shelflife [FLAGS] [OPTIONS]
 
+FLAGS:
+    -a, --all          Queries all available namespaces
+    -h, --help         Prints help information
+    -V, --version      Prints version information
+    -v, --view         Print namespaces currently tracked in MongoDB
+    -w, --whitelist    Determines working with the whitelist or the shelflife table
+
+OPTIONS:
+    -d, --delete <NAMESPACE>     Deletes a namespace out of MongoDB
+    -k, --known <NAMESPACE>      Query API and Database for a known namespace
+    -p, --project <NAMESPACE>    Query API for project info about a namespace
+```
