@@ -19,6 +19,9 @@ use lettre::smtp::ConnectionReuseParameters;
 use lettre_email::Email;
 use std::env;
 use dotenv::dotenv;
+use std::fs::File;
+use std::io::prelude::*;
+use serde::{Serialize, Deserialize};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -177,7 +180,6 @@ pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb:
     let email_uname = env::var("EMAIL_UNAME")?;
     let email_passwd = env::var("EMAIL_PASSWD")?;
     let email_addr = env::var("EMAIL_ADDRESS")?;
-    
 
     let mut mailer = SmtpClient::new_simple(&email_srv).unwrap()
         .credentials(Credentials::new(email_uname.to_string(), email_passwd.to_string()))
@@ -196,8 +198,15 @@ pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb:
                 let addr: &str = &*email_addr;
                 if age > chrono::Duration::weeks(24) { // Check longest first, decending.
                     println!("The last update to {} was more than 24 weeks ago. Deleting...", &item.name);
+                    println!("But not really because the delete call was commented out!!!");
+
+                    //let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
+                    //let _result = delete_call_api(&http_client, &delete_call);
+
+                    //let _db_result = remove_db_item(mongo_client, collection, &item.name);
 
                     for name in item.admins.iter() {
+                        let strpname = name.replace("\"", "");
                         println!("Notifying {}", &strpname);
                         let strpname = name.replace("\"", "");
                         let email = Email::builder()
@@ -296,6 +305,26 @@ pub fn get_call_api(http_client: &reqwest::Client, call: &str,) -> Result<reqwes
     }
 }
 
+// Make a call to the Openshift API about some namespace info.
+pub fn get_yaml_call_api(http_client: &reqwest::Client, call: String,) -> Result<reqwest::Response> {
+    let token = env::var("OKD_TOKEN")?;
+    let response = http_client 
+        .get(call.as_str())
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Accept", "application/yaml")
+        .send()?;
+
+    // Ensure the call was successful
+    if response.status() == StatusCode::OK {
+        Ok(response)
+    } else {
+        return Err(From::from(format!(
+            "Error! Could not run API call. Call: {}, Code: {}", call, response.status()),
+        ));
+    }
+}
+
+
 pub fn put_call_api(http_client: &reqwest::Client, call: &str, post: String,) -> Result<reqwest::Response> {
     dotenv().ok();
     let token = env::var("OKD_TOKEN")?;
@@ -313,6 +342,319 @@ pub fn put_call_api(http_client: &reqwest::Client, call: &str, post: String,) ->
             "Error! Could not run API call. Call: {}, Code: {}", call, response.status()),
         ));
     }
+}
+
+pub fn delete_call_api(http_client: &reqwest::Client, call: &str,) -> Result<reqwest::Response> {
+    dotenv().ok();
+    let token = env::var("OKD_TOKEN")?;
+    let response = http_client
+        .delete(call)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()?;
+     
+    // Ensure the call was successful
+    if response.status() == StatusCode::OK {
+        Ok(response)
+    } else {
+        return Err(From::from(format!(
+            "Error! Could not run API call. Call: {}, Code: {}", call, response.status()),
+        ));
+    }
+
+}
+
+pub fn export_project(http_client: &reqwest::Client, project: &str) -> Result<()> { // TODO: Make private
+    dotenv().ok();
+    let endpoint = env::var("ENDPOINT")?;
+
+    let project_out = vec![
+        get_call_api(http_client, &format!("https://{}/api?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/api/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/apiregistration.k8s.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/apiregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/extensions/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/apps/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/apps/v1beta2?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/apps/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/events.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/authentication.k8s.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/authentication.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/autoscaling/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/autoscaling/v2beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/batch/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/batch/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/certificates.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/networking.k8s.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/policy/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/authorization.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/rbac.authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/rbac.authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/storage.k8s.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/storage.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/admissionregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/apiextensions.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/scheduling.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/apps.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/build.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/image.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/network.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/oauth.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/project.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/quota.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/route.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/security.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/template.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/user.openshift.io/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/monitoring.coreos.com/v1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/apis/metrics.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_call_api(http_client, &format!("https://{}/api/v1/namespaces/{}/pods?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/api/v1/namespaces/{}/replicationcontrollers?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/api/v1/namespaces/{}/services?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/apps/v1/namespaces/{}/daemonsets?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/apps/v1/namespaces/{}/deployments?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/apps/v1/namespaces/{}/replicasets?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/apps/v1/namespaces/{}/statefulsets?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/autoscaling/v1/namespaces/{}/horizontalpodautoscalers?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/batch/v1/namespaces/{}/jobs?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/batch/v1beta1/namespaces/{}/cronjobs?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/build.openshift.io/v1/namespaces/{}/buildconfigs?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/build.openshift.io/v1/namespaces/{}/builds?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/image.openshift.io/v1/namespaces/{}/imagestreams?export=true&limit=500", endpoint, project)),
+        get_call_api(http_client, &format!("https://{}/apis/route.openshift.io/v1/namespaces/{}/routes?export=true&limit=500", endpoint, project)),
+    ];
+
+    //let mut project_out_file = File::create(format!("{}.yaml", project))?;
+    for call in project_out {
+        match call {
+            Ok(mut b) => {
+                println!("--------------");
+                let bjson: serde_json::Value = b.json()?;
+                println!("{}", serde_yaml::to_string(&bjson).expect("should get yaml"));
+            }
+            Err(back) => {
+                println!("LIGMA!");
+            }
+        }
+    //project_out_file.write_all(call.unwrap())?;
+    }
+
+//    let rolebindings = get_call_api(http_client, "");
+    let rolebindings = get_yaml_call_api(http_client, format!("https://{}/apis/authorization.openshift.io/v1/namespaces/{}/rolebindings?export=true&limit=500", endpoint, project));
+
+    let serviceaccounts = get_yaml_call_api(http_client, format!("https://{}/api/v1/namespaces/{}/serviceaccounts?export=true&limit=500", endpoint, project));
+
+    let secrets = get_yaml_call_api(http_client, format!("https://{}/api/v1/namespaces/{}/secrets?export=true&limit=500", endpoint, project));
+
+    let imagestreamtags = get_yaml_call_api(http_client, format!("https://{}/apis/image.openshift.io/v1/namespaces/{}/imagestreamtags?export=true&limit=500", endpoint, project));
+
+    let podpreset = vec![
+        get_yaml_call_api(http_client, format!("https://{}/api?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/api/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiregistration.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/extensions/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1beta2?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/events.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authentication.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authentication.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/autoscaling/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/autoscaling/v2beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/batch/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/batch/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/certificates.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/networking.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/policy/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/rbac.authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/rbac.authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/storage.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/storage.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/admissionregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiextensions.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/scheduling.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/build.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/image.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/network.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/oauth.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/project.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/quota.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/route.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/security.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/template.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/user.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/monitoring.coreos.com/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/metrics.k8s.io/v1beta1?timeout=32s", endpoint)),
+    ];
+
+    let cms = vec![
+        get_yaml_call_api(http_client, format!("https://{}/apis?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/api/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiregistration.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/extensions/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1beta2?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/events.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authentication.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authentication.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/autoscaling/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/autoscaling/v2beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/batch/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/batch/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/certificates.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/networking.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/policy/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/rbac.authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/rbac.authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/storage.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/storage.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/admissionregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiextensions.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/scheduling.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/build.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/image.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/network.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/oauth.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/project.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/quota.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/route.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/security.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/template.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/user.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/monitoring.coreos.com/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/metrics.k8s.io/v1beta1?timeout=32s", endpoint)),
+    ];
+
+
+    let egressnetworkpolicies = get_yaml_call_api(http_client, format!("https://{}/apis/network.openshift.io/v1/namespaces/{}/egressnetworkpolicies?export=true&limit=500", endpoint, project));
+
+    let rolebindingrestrictions = get_yaml_call_api(http_client, format!("https://{}/apis/authorization.openshift.io/v1/namespaces/{}/rolebindingrestrictions?export=true&limit=500", endpoint, project));
+
+    let limitranges = get_yaml_call_api(http_client, format!("https://{}/api/v1/namespaces/{}/limitranges?export=true&limit=500", endpoint, project));
+
+    let resourcequotas = get_yaml_call_api(http_client, format!("https://{}/api/v1/namespaces/{}/resourcequotas?export=true&limit=500", endpoint, project));
+
+    let pvcs = vec![
+        get_yaml_call_api(http_client, format!("https://{}/api?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/api/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiregistration.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/extensions/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1beta2?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/events.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authentication.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authentication.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/autoscaling/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/autoscaling/v2beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/batch/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/batch/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/certificates.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/networking.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/policy/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/rbac.authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/rbac.authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/storage.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/storage.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/admissionregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiextensions.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/scheduling.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/build.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/image.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/network.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/oauth.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/project.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/quota.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/route.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/security.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/template.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/user.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/monitoring.coreos.com/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/metrics.k8s.io/v1beta1?timeout=32s", endpoint)),
+    ];
+
+    let templates = get_yaml_call_api(http_client, format!("https://{}/apis/template.openshift.io/v1/namespaces/{}/templates?export=true&limit=500", endpoint, project));
+
+    let cronjobs = get_yaml_call_api(http_client, format!("https://{}/apis/batch/v1beta1/namespaces/{}/cronjobs?export=true&limit=500", endpoint, project));
+
+    let statefulset = get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1/namespaces/{}/statefulsets?export=true&limit=500", endpoint, project));
+
+    let hpas = vec![
+        get_yaml_call_api(http_client, format!("https://{}/api?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/api/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiregistration.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/extensions/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1beta2?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/events.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authentication.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authentication.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/autoscaling/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/autoscaling/v2beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/batch/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/batch/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/certificates.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/networking.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/policy/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/authorization.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/rbac.authorization.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/rbac.authorization.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/storage.k8s.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/storage.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/admissionregistration.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apiextensions.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/scheduling.k8s.io/v1beta1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/apps.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/build.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/image.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/network.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/oauth.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/project.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/quota.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/route.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/security.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/template.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/user.openshift.io/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/monitoring.coreos.com/v1?timeout=32s", endpoint)),
+        get_yaml_call_api(http_client, format!("https://{}/apis/metrics.k8s.io/v1beta1?timeout=32s", endpoint)),
+    ];
+
+    let deployments = get_yaml_call_api(http_client, format!("https://{}/apis/extensions/v1beta1/namespaces/{}/deployments?export=true&limit=500", endpoint, project));
+
+    let replicasets = get_yaml_call_api(http_client, format!("https://{}/apis/extensions/v1beta1/namespaces/{}/replicasets?export=true&limit=500", endpoint, project));
+
+    let poddisruptionbudget = get_yaml_call_api(http_client, format!("https://{}/apis/policy/v1beta1/namespaces/{}/poddisruptionbudgets?export=true&limit=500", endpoint, project));
+
+
+    let endpoints = get_yaml_call_api(http_client, format!("https://{}/api/v1/namespaces/{}/endpoints?export=true&limit=500", endpoint, project));
+
+    Ok(())
 }
 
 fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem>> {
