@@ -30,7 +30,6 @@ pub fn query_known_namespace(
     http_client: &reqwest::Client,
     namespace: &str,
 ) -> Result<()> {
-    dotenv().ok();
     println!(
         "{}",
         format!("\nQuerying API for namespace {}...", namespace).to_string()
@@ -91,7 +90,6 @@ fn get_shelflife_info(
     http_client: &reqwest::Client,
     namespace: &str,
 ) -> Result<DBItem> {
-    dotenv().ok();
     let endpoint = env::var("ENDPOINT")?; 
     // Query for builds
     // Formulate the call
@@ -172,7 +170,6 @@ fn get_shelflife_info(
 }
 
 pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb::Client, collection: &str) -> Result<()>{
-    dotenv().ok();   
     let endpoint = env::var("ENDPOINT")?; 
 
     let email_srv = env::var("EMAIL_SRV")?;
@@ -305,7 +302,6 @@ pub fn get_call_api(http_client: &reqwest::Client, call: &str,) -> Result<reqwes
 }
 
 pub fn put_call_api(http_client: &reqwest::Client, call: &str, post: String,) -> Result<reqwest::Response> {
-    dotenv().ok();
     let token = env::var("OKD_TOKEN")?;
     let response = http_client
         .put(call)
@@ -324,7 +320,6 @@ pub fn put_call_api(http_client: &reqwest::Client, call: &str, post: String,) ->
 }
 
 pub fn delete_call_api(http_client: &reqwest::Client, call: &str,) -> Result<reqwest::Response> {
-    dotenv().ok();
     let token = env::var("OKD_TOKEN")?;
     let response = http_client
         .delete(call)
@@ -345,15 +340,24 @@ pub fn delete_call_api(http_client: &reqwest::Client, call: &str,) -> Result<req
 pub fn export_project_sh(project: &str) -> Result<()> {
     let token = env::var("OKD_TOKEN")?;
     let endpoint = env::var("ENDPOINT")?;
+    let fail = "failed to execute process";
 
-    let status = Command::new("./backup.sh")
-                            .args(&[project, &token, &endpoint])
-                            .current_dir("/home/wilnil/Documents")
-                            .output()
-                            .expect("I _reeeed_ on the floor.");
-
-    dbg!(status);
-
+    Command::new("sh").arg("-c").arg(format!("oc login https://{} --token={}", endpoint, token))
+    .current_dir("/tmp/backup_test").status().expect(fail);
+    
+    Command::new("sh").arg("-c").arg(format!("mkdir /tmp/backup_test/{}", project))
+    .current_dir("/tmp/backup_test").output().expect(fail);
+    Command::new("sh").arg("-c").arg(format!("oc project {}", project))
+    .current_dir("/tmp/backup_test").output().expect(fail);
+    Command::new("sh").arg("-c").arg(format!("oc get -o yaml --export all > {}/project.yaml", project))
+    .current_dir("/tmp/backup_test").output().expect(fail);
+    println!("Done with GET for export all");
+    let items = vec!["rolebindings", "serviceaccounts", "secrets", "imagestreamtags", "podpreset", "cms", "egressnetworkpolicies", "rolebindingrestrictions", "limitranges", "resourcequotas", "pvcs", "templates", "cronjobs", "statefulsets", "hpas", "deployments", "replicasets", "poddisruptionbudget", "endpoints"];
+    for object in items {
+        Command::new("sh").arg("-c").arg(format!("oc get -o yaml --export {} > {}/{}.yaml", object, project, object))
+    .current_dir("/tmp/backup_test").output().expect(fail);
+        println!("Done with GET for export {}", object);
+    }
     Ok(())
 }
 
