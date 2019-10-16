@@ -85,6 +85,19 @@ pub fn query_known_namespace(
     Ok(())
 }
 
+pub fn get_proj_names(http_client: &reqwest::Client) -> Result<Vec<String>> {
+    let endpoint = env::var("ENDPOINT")?; 
+    let projects_call = format!("https://{}/apis/project.openshift.io/v1/projects", endpoint); 
+    let projects_resp = get_call_api(&http_client, &projects_call);
+    let projects_json: ProjectResponse = projects_resp?.json()?;
+    let mut projects = Vec::new();
+    for item in projects_json.items {
+        projects.push(item.metadata.name);
+    }
+    dbg!(&projects);
+    Ok(projects)
+}
+
 // Queries the API and returns a Struct with data relevant for shelflife's operation.
 fn get_shelflife_info(
     http_client: &reqwest::Client,
@@ -193,13 +206,19 @@ pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb:
                 let age = Utc::now().signed_duration_since(last_update_unwrapped);
                 let addr: &str = &*email_addr;
                 if age > chrono::Duration::weeks(24) { // Check longest first, decending.
-                    println!("The last update to {} was more than 24 weeks ago. Deleting...", &item.name);
+                    println!("The last update to {} was more than 24 weeks ago. Project marked for deletion...", &item.name);
+                    println!("Backing up project...");
+                    export_project_sh(&item.name);
+                    println!("Requesting API to delete...");
                     println!("But not really because the delete call was commented out!!!");
+
 
                     //let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
                     //let _result = delete_call_api(&http_client, &delete_call);
 
                     //let _db_result = remove_db_item(mongo_client, collection, &item.name);
+
+                    println!("Project has been marked for deletion and removed from ShelfLife DB.");
 
                     for name in item.admins.iter() {
                         let strpname = name.replace("\"", "");
@@ -342,9 +361,9 @@ pub fn export_project_sh(project: &str) -> Result<()> {
     let endpoint = env::var("ENDPOINT")?;
     let fail = "failed to execute process";
 
+    // Export project
     Command::new("sh").arg("-c").arg(format!("oc login https://{} --token={}", endpoint, token))
     .current_dir("/tmp/backup_test").status().expect(fail);
-    
     Command::new("sh").arg("-c").arg(format!("mkdir /tmp/backup_test/{}", project))
     .current_dir("/tmp/backup_test").output().expect(fail);
     Command::new("sh").arg("-c").arg(format!("oc project {}", project))
@@ -358,6 +377,9 @@ pub fn export_project_sh(project: &str) -> Result<()> {
     .current_dir("/tmp/backup_test").output().expect(fail);
         println!("Done with GET for export {}", object);
     }
+
+    //Compress it
+    Command::new("sh").arg("-c").arg(format!("zip -r {}.zip {}", project, project)).current_dir("/tmp/backup_test").output().expect(fail); 
     Ok(())
 }
 

@@ -1,6 +1,27 @@
 use serde::Deserialize;
-//use chrono::{DateTime, FixedOffset};
 
+// ------------------------------
+// Structs for project names
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectMetadata {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectItem {
+    pub metadata: ProjectMetadata, 
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectResponse {
+    pub items: Vec<ProjectItem>,
+}
+// ------------------------------
+
+// ------------------------------
 // Structs for pods
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,8 +40,9 @@ pub struct PodItem {
 pub struct PodsResponse {
     pub items: Vec<PodItem>,
 }
+// ------------------------------
 
-
+// ------------------------------
 // Structs for Build
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,8 +61,9 @@ pub struct BuildItem {
 pub struct BuildlistResponse {
     pub items: Vec<BuildItem>,
 }
+// ------------------------------
 
-
+// ------------------------------
 // Structs for Deployment
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,8 +96,9 @@ pub struct DeploymentItem {
 pub struct DeploymentResponse {
     pub items: Vec<DeploymentItem>,
 }
+// ------------------------------
 
-
+// ------------------------------
 // Structs for Rolebindings
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,7 +118,7 @@ pub struct RolebindingsItem {
 pub struct RolebindingsResponse {
     pub items: Vec<RolebindingsItem>,
 }
-
+// ------------------------------
 
 // Struct to represent a DB Object
 pub struct DBItem {

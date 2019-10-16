@@ -10,7 +10,7 @@ use mongodb::ThreadedClient;
 use shelflife::{query_known_namespace,
                 check_expiry_dates,
                 get_call_api,
-                export_project_sh,
+                get_proj_names,
                 remove_db_item,
                 view_db,
                 Result};
@@ -78,8 +78,9 @@ fn main() -> Result<()> {
     }
 
     if matches.occurrences_of("all") > 0 {
+        let _proj_names = get_proj_names(&http_client);
         //let _expiration = check_expiry_dates(&http_client, &mongo_client, collection);
-        let _export = export_project_sh("krobbin");
+        //let _export = export_project_sh("krobbin");
     }
  
     if let Some(deleted) = matches.value_of("delete") {
