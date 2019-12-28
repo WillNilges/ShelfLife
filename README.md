@@ -21,6 +21,14 @@ features planned:
 
 It will also have an interactive mode for setup, configuration, and monitoring.
 
+## Build Dependencies
+
+### Ubuntu (18.04 recommended)
+
+- `build-essential`
+- `libssl-dev`
+- `pkg-config`
+
 ## Usage
 
 To use this app, you'll need a few things:
