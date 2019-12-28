@@ -18,84 +18,90 @@ use lettre::{Transport, SmtpClient};
 use lettre::smtp::ConnectionReuseParameters;
 use lettre_email::Email;
 use std::env;
-use dotenv::dotenv;
-use std::fs;
 use std::process::Command;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+/*                                  PROJECT FUNCTIONS  */
+/* --------------------------------------------------  */
+
+pub fn get_project_names(http_client: &reqwest::Client) -> Result<Vec<String>> {
+    let endpoint = env::var("ENDPOINT")?; 
+    let projects_call = format!("https://{}/apis/project.openshift.io/v1/projects", endpoint); 
+    let projects_resp = get_call_api(&http_client, &projects_call);
+    let _projects_resp_unwrapped = Some(&projects_resp);
+    let mut projects = Vec::new();
+    match projects_resp {
+        Ok(mut projects_resp_unwrapped) => {
+            let projects_json: ProjectResponse = projects_resp_unwrapped.json()?;
+            
+            for item in projects_json.items {
+                projects.push(item.metadata.name);
+            }
+            dbg!(&projects);
+        },
+        Err(_) => {
+            dbg!(&projects_resp);
+        },
+    }
+    // Ok(())
+    Ok(projects)
+}
+
+//Queries API for a project namespace name 
 pub fn query_known_namespace(
     mongo_client: &mongodb::Client,
     collection: &str,
     http_client: &reqwest::Client,
     namespace: &str,
+    autoadd: bool,
 ) -> Result<()> {
-    println!(
-        "{}",
-        format!("\nQuerying API for namespace {}...", namespace).to_string()
-    );
-    let namespace_info = get_shelflife_info(
-        http_client,
-        namespace,
-    )?;
-    print!("\n > > > API Response > > > ");
-    println!(
-        "{} {:?} {} {}",
-        namespace_info.name, namespace_info.admins, namespace_info.last_update, namespace_info.cause
-    );
+    print!("{}",format!("\nQuerying API for namespace {}...", namespace).to_string());
+    let namespace_info = get_shelflife_info(http_client, namespace,)?;
+    print!(" API Response: ");
+    println!("{} {:?} {} {}", namespace_info.name, namespace_info.admins, namespace_info.last_update, namespace_info.cause);
 
     // Query the DB and get back a table of already added namespaces
     let current_table: Vec<DBItem> = get_db(mongo_client, &collection)?;
     
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
     let queried_namespace = namespace_info.name.to_string();
-    if !current_table
-        .iter()
-        .any(|x| x.name.to_string() == queried_namespace)
-    {
-        println!(
-            "\nThis namespace ({}) is not in the database! Would you like to add it? (y/n): ",
-            queried_namespace
-        );
-        let mut input = String::new();
-        std::io::stdin()
-            .read_line(&mut input)
-            .expect("Could not read response");
+    if !current_table.iter().any(|x| x.name.to_string() == queried_namespace) {
+        let mut input = "n".to_string();
+        if !autoadd {
+            println!("\nThis namespace ({}) is not in the database! Would you like to add it? (y/n): ", queried_namespace);
+            std::io::stdin().read_line(&mut input).expect("Could not read response");
+        } else {
+            input = "y".to_string();
+        }
+        
         if input.trim() == "y" {
              match collection.as_ref() {
-                "namespaces" => {
-                    println!("Putting a ShelfLife on {}", queried_namespace);
+                "graylist" => {
+                    println!("Putting a ShelfLife on {}\n", queried_namespace);
                 }
                 "whitelist" => {
-                    println!("Whitelisting {}", queried_namespace);
+                    println!("Whitelisting {}\n", queried_namespace);
                 }
                 _ => {
-                    println!("Unknown table:");
+                    println!("Unknown table:\n");
                 }
             }
             let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
         } else if input.trim() == "n" {
-            println!("Ok.");
+            println!("Ok. Not adding.");
         } else {
             println!("Invalid response.");
         }
     } else {
-        println!("The requested namespace is in the database.")
+        println!("The requested namespace is in the database. Updating entry...");
+        let _db_result = remove_db_item(mongo_client, collection, &queried_namespace);
+        let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
+        println!("Entry updated.")
+
+
     }
     Ok(())
-}
-
-pub fn get_proj_names(http_client: &reqwest::Client) -> Result<Vec<String>> {
-    let endpoint = env::var("ENDPOINT")?; 
-    let projects_call = format!("https://{}/apis/project.openshift.io/v1/projects", endpoint); 
-    let projects_resp = get_call_api(&http_client, &projects_call);
-    let projects_json: ProjectResponse = projects_resp?.json()?;
-    let mut projects = Vec::new();
-    for item in projects_json.items {
-        projects.push(item.metadata.name);
-    }
-    dbg!(&projects);
-    Ok(projects)
 }
 
 // Queries the API and returns a Struct with data relevant for shelflife's operation.
@@ -182,7 +188,11 @@ fn get_shelflife_info(
     Ok(api_response)
 }
 
-pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb::Client, collection: &str) -> Result<()>{
+pub fn check_expiry_dates(
+    http_client: &reqwest::Client, 
+    mongo_client: &mongodb::Client, 
+    collection: &str
+) -> Result<()>{
     let endpoint = env::var("ENDPOINT")?; 
 
     let email_srv = env::var("EMAIL_SRV")?;
@@ -201,6 +211,8 @@ pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb:
         let last_update = DateTime::parse_from_rfc2822(&item.last_update);
         let _last_update_unwrapped = Some(last_update);
 
+        print!("Checking status of {}...", &item.name);
+
         match last_update {
             Ok(last_update_unwrapped) => {
                 let age = Utc::now().signed_duration_since(last_update_unwrapped);
@@ -208,15 +220,13 @@ pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb:
                 if age > chrono::Duration::weeks(24) { // Check longest first, decending.
                     println!("The last update to {} was more than 24 weeks ago. Project marked for deletion...", &item.name);
                     println!("Backing up project...");
-                    export_project_sh(&item.name);
+                    export_project(&item.name);
                     println!("Requesting API to delete...");
-                    println!("But not really because the delete call was commented out!!!");
+                    //println!("But not really, because the delete call was commented out!!!");
 
-
-                    //let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
-                    //let _result = delete_call_api(&http_client, &delete_call);
-
-                    //let _db_result = remove_db_item(mongo_client, collection, &item.name);
+                    let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
+                    let _result = delete_call_api(&http_client, &delete_call);
+                    let _db_result = remove_db_item(mongo_client, collection, &item.name);
 
                     println!("Project has been marked for deletion and removed from ShelfLife DB.");
 
@@ -228,7 +238,7 @@ pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb:
                             .to((format!("{}@csh.rit.edu", strpname), strpname))
                             .from(addr)
                             .subject("Hi, I nuked your project :)")
-                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project on your usershare at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
+                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project in your homedir at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
                             .build()
                             .unwrap();
                         let _mail_result = mailer.send(email.into());
@@ -274,7 +284,7 @@ pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb:
                             .to((format!("{}@csh.rit.edu", strpname), strpname))
                             .from(addr)
                             .subject("Your project's resources have been revoked.")
-                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 4 weeks.", &item.name, &item.last_update))
+                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 8 weeks.", &item.name, &item.last_update))
                             .build()
                             .unwrap();
                         let _mail_result = mailer.send(email.into());
@@ -293,6 +303,8 @@ pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb:
                             .unwrap();
                         let _mail_result = mailer.send(email.into());
                     }
+                } else {
+                    println!(" ok.");
                 }
             }
             Err(_) => {}
@@ -301,6 +313,38 @@ pub fn check_expiry_dates(http_client: &reqwest::Client, mongo_client: &mongodb:
     mailer.close(); 
     Ok(())
 }
+
+pub fn export_project(project: &str) -> Result<()> {
+    let token = env::var("OKD_TOKEN")?;
+    let endpoint = env::var("ENDPOINT")?;
+    let fail = "failed to execute process";
+
+    // Export project
+    Command::new("sh").arg("-c").arg("mkdir /tmp/shelflife_backup")
+    .current_dir("/").status().expect(fail);
+    Command::new("sh").arg("-c").arg(format!("oc login https://{} --token={}", endpoint, token))
+    .current_dir("/tmp/backup_test").status().expect(fail);
+    Command::new("sh").arg("-c").arg(format!("mkdir /tmp/backup_test/{}", project))
+    .current_dir("/tmp/backup_test").output().expect(fail);
+    Command::new("sh").arg("-c").arg(format!("oc project {}", project))
+    .current_dir("/tmp/backup_test").output().expect(fail);
+    Command::new("sh").arg("-c").arg(format!("oc get -o yaml --export all > {}/project.yaml", project))
+    .current_dir("/tmp/backup_test").output().expect(fail);
+    println!("Done with GET for export all");
+    let items = vec!["rolebindings", "serviceaccounts", "secrets", "imagestreamtags", "podpreset", "cms", "egressnetworkpolicies", "rolebindingrestrictions", "limitranges", "resourcequotas", "pvcs", "templates", "cronjobs", "statefulsets", "hpas", "deployments", "replicasets", "poddisruptionbudget", "endpoints"];
+    for object in items {
+        Command::new("sh").arg("-c").arg(format!("oc get -o yaml --export {} > {}/{}.yaml", object, project, object))
+    .current_dir("/tmp/backup_test").output().expect(fail);
+        println!("Done with GET for export {}", object);
+    }
+
+    //Compress it
+    Command::new("sh").arg("-c").arg(format!("zip -r {}.zip {}", project, project)).current_dir("/tmp/backup_test").output().expect(fail); 
+    Ok(())
+}
+
+/*                                       API FUNCTIONS  */
+/*  --------------------------------------------------  */
 
 // Make a call to the Openshift API about some namespace info.
 pub fn get_call_api(http_client: &reqwest::Client, call: &str,) -> Result<reqwest::Response> {
@@ -356,36 +400,13 @@ pub fn delete_call_api(http_client: &reqwest::Client, call: &str,) -> Result<req
 
 }
 
-pub fn export_project_sh(project: &str) -> Result<()> {
-    let token = env::var("OKD_TOKEN")?;
-    let endpoint = env::var("ENDPOINT")?;
-    let fail = "failed to execute process";
+/*                                  DATABASE FUNCTIONS  */
+/*  --------------------------------------------------  */
 
-    // Export project
-    Command::new("sh").arg("-c").arg(format!("oc login https://{} --token={}", endpoint, token))
-    .current_dir("/tmp/backup_test").status().expect(fail);
-    Command::new("sh").arg("-c").arg(format!("mkdir /tmp/backup_test/{}", project))
-    .current_dir("/tmp/backup_test").output().expect(fail);
-    Command::new("sh").arg("-c").arg(format!("oc project {}", project))
-    .current_dir("/tmp/backup_test").output().expect(fail);
-    Command::new("sh").arg("-c").arg(format!("oc get -o yaml --export all > {}/project.yaml", project))
-    .current_dir("/tmp/backup_test").output().expect(fail);
-    println!("Done with GET for export all");
-    let items = vec!["rolebindings", "serviceaccounts", "secrets", "imagestreamtags", "podpreset", "cms", "egressnetworkpolicies", "rolebindingrestrictions", "limitranges", "resourcequotas", "pvcs", "templates", "cronjobs", "statefulsets", "hpas", "deployments", "replicasets", "poddisruptionbudget", "endpoints"];
-    for object in items {
-        Command::new("sh").arg("-c").arg(format!("oc get -o yaml --export {} > {}/{}.yaml", object, project, object))
-    .current_dir("/tmp/backup_test").output().expect(fail);
-        println!("Done with GET for export {}", object);
-    }
-
-    //Compress it
-    Command::new("sh").arg("-c").arg(format!("zip -r {}.zip {}", project, project)).current_dir("/tmp/backup_test").output().expect(fail); 
-    Ok(())
-}
 
 fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem>> {
     let coll = mongo_client
-        .db("SHELFLIFE_NAMESPACES")
+        .db("SHELFLIFE")
         .collection(&collection);
     let mut namespace_table = Vec::new(); // The vec of namespace information we're gonna send back.
 
@@ -424,8 +445,8 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
     let current_table: Vec<DBItem> = get_db(mongo_client, collection)?;
     match collection.as_ref() {
-        "namespaces" => {
-            println!("\nProjects with ShelfLives:");
+        "graylist" => {
+            println!("\nGraylisted projects:");
         }
         "whitelist" => {
             println!("\nWhitelisted projects:");
@@ -453,7 +474,7 @@ fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem
     // Direct connection to a server. Will not look for other servers in the topology.
     dbg!(&item.last_update);
     let coll = mongo_client
-        .db("SHELFLIFE_NAMESPACES")
+        .db("SHELFLIFE")
         .collection(&collection);
     coll.insert_one(doc!{"name": item.name, "admins": bson::to_bson(&item.admins)?, "last_update": item.last_update, "cause": item.cause}, None).unwrap();
     Ok(())
@@ -463,7 +484,7 @@ fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem
 pub fn remove_db_item(mongo_client: &mongodb::Client, collection: &str, namespace: &str) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     let coll = mongo_client
-        .db("SHELFLIFE_NAMESPACES")
+        .db("SHELFLIFE")
         .collection(collection);
     coll.find_one_and_delete(doc! {"name": namespace}, None)
         .unwrap();
