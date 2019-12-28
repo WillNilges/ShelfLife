@@ -7,13 +7,15 @@ use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
-use shelflife::{query_known_namespace,
+use shelflife::{
+                query_known_namespace,
                 check_expiry_dates,
                 get_call_api,
-                get_proj_names,
+                get_project_names,
                 remove_db_item,
                 view_db,
-                Result};
+                Result
+            };
 
 fn main() -> Result<()> {
     dotenv().ok();
@@ -38,57 +40,70 @@ fn main() -> Result<()> {
 
     let matches = App::new("ShelfLife")
         .author("Willard N. <willnilges@mail.rit.edu>")
-        .about("Automatic management of spin-down and deletion of OKD projects.")
+        .about("Automatic spin-down and deletion management of OKD projects.")
         .setting(AppSettings::ArgRequiredElseHelp)
         .arg(Arg::with_name("all")
             .short("a")
             .long("all")
-            .help("Queries all available namespaces")) 
+            .help("Queries all available namespaces and adds/updates any that are missing/outdated to the database."))
+        .arg(Arg::with_name("cull")
+            .short("c")
+            .long("cull")
+            .help("Queries all available namespaces and adds/updates any that are missing/outdated to the database and then checks for projects to delete."))
         .arg(Arg::with_name("delete")
             .short("d")
             .long("delete")
             .value_name("NAMESPACE")
-            .help("Deletes a namespace out of MongoDB")
+            .help("Removes a namespace from the database.")
             .takes_value(true))
         .arg(Arg::with_name("known")
             .short("k")
             .long("known")
             .value_name("NAMESPACE")
-            .help("Query API and Database for a known namespace")
+            .help("Query API and ShelfLife Database for a known namespace. If it is missing from the database, the user is is asked if they want to add it.")
             .takes_value(true))
         .arg(Arg::with_name("project")
             .short("p")
             .long("project")
             .value_name("NAMESPACE")
-            .help("Query API for project info about a namespace")
+            .help("Query API for project info about a namespace.")
             .takes_value(true))
         .arg(Arg::with_name("view")
             .short("v")
             .long("view")
-            .help("Print namespaces currently tracked in MongoDB"))
+            .help("Print namespaces currently tracked in the database."))
         .arg(Arg::with_name("whitelist")
             .short("w")
             .long("whitelist")
-            .help("Determines working with the whitelist or the shelflife table"))
+            .help("Enables whitelist mode for that command, performing operations on the whitelist instead of the greylist."))
         .get_matches();
 
-    let mut collection = "namespaces";
+    let mut collection = "graylist";
     if matches.occurrences_of("whitelist") > 0 {
         collection = "whitelist";
     }
 
     if matches.occurrences_of("all") > 0 {
-        let _proj_names = get_proj_names(&http_client);
-        //let _expiration = check_expiry_dates(&http_client, &mongo_client, collection);
-        //let _export = export_project_sh("krobbin");
+        let proj_names = get_project_names(&http_client);
+        for project in proj_names.unwrap() {
+            query_known_namespace(&mongo_client, collection, &http_client, &project, true)?;
+        }
     }
  
+    if matches.occurrences_of("cull") > 0 {
+        /*let proj_names = get_project_names(&http_client);
+        for project in proj_names.unwrap() {
+            query_known_namespace(&mongo_client, collection, &http_client, &project, true)?;
+        }*/
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection);
+    }
+
     if let Some(deleted) = matches.value_of("delete") {
         remove_db_item(&mongo_client, collection, deleted)?;
     }
     
     if let Some(known_namespace) = matches.value_of("known") {
-        query_known_namespace(&mongo_client, collection, &http_client, known_namespace)?;
+        query_known_namespace(&mongo_client, collection, &http_client, known_namespace, false)?;
         //let call = "https://okd.csh.rit.edu:8443/apis/build.openshift.io/v1/namespaces/swag/builds";
         //let call = "https://okd.csh.rit.edu:8443/apis/apps.openshift.io/v1/namespaces/swag/deploymentconfigs";
         //let result = get_call_api(&http_client, &call, &token);
