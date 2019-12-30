@@ -6,6 +6,7 @@ use serde::Deserialize;
 #[serde(rename_all = "camelCase")]
 pub struct ProjectMetadata {
     pub name: String,
+    pub creation_timestamp: String,
 }
 
 #[derive(Debug, Deserialize)]
