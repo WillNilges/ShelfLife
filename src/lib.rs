@@ -228,10 +228,18 @@ pub fn check_expiry_dates(
                 let addr: &str = &*email_addr;
                 if age > chrono::Duration::weeks(24) { // Check longest first, decending.
                     println!("The last update to {} was more than 24 weeks ago. Project marked for deletion...", &item.name);
-                    println!("Backing up project...");
-                    export_project(&item.name);
+                    println!("Exporting project...");
+                    let export_result = export_project(&item.name);
+                    match export_result {
+                        Ok(()) => {
+                            println!("Export complete.");
+                        }
+                        _ => {
+                            println!("Export failed!");
+                            dbg!(&export_result);
+                        }
+                    }
                     println!("Requesting API to delete...");
-                    //println!("But not really, because the delete call was commented out!!!");
 
                     let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
                     let _result = delete_call_api(&http_client, &delete_call);
