@@ -7,8 +7,6 @@ use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
-use shelflife::protocol::*; // TMP
-
 use shelflife::{
                 query_known_namespace,
                 check_expiry_dates,
