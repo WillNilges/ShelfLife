@@ -110,12 +110,17 @@ fn get_shelflife_info(
     namespace: &str,
 ) -> Result<DBItem> {
     let endpoint = env::var("ENDPOINT")?; 
+
+    // Query for creation date. This is guaranteed to exist.
+    let project_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, namespace); // Formulate the call
+    let project_resp = get_call_api(&http_client, &project_call); // Make the call
+    //dbg!(&project_resp);
+    let project_json: ProjectItem = project_resp?.json()?;
+    let mut latest_update = DateTime::parse_from_rfc3339(&project_json.metadata.creation_timestamp)?;
+    let mut cause = "Creation";
+
     // Query for builds
-    // Formulate the call
-    let builds_call = format!(
-        "https://{}/apis/build.openshift.io/v1/namespaces/{}/builds",
-        endpoint, namespace
-    );
+    let builds_call = format!("https://{}/apis/build.openshift.io/v1/namespaces/{}/builds",endpoint, namespace); // Formulate the call
     let builds_resp = get_call_api(&http_client, &builds_call); // Make the call
     let builds_json: BuildlistResponse = builds_resp?.json()?; // Bind json of reply to struct.
     let mut builds = Vec::new();
@@ -125,10 +130,7 @@ fn get_shelflife_info(
     
     // Query deployment configs
     // Formulate the call
-    let deploycfgs_call = format!(
-        "https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs",
-        endpoint, namespace
-    );
+    let deploycfgs_call = format!("https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs", endpoint, namespace);
     let deploycfgs_resp = get_call_api(&http_client, &deploycfgs_call); // Make the call
     let deploycfgs_json: DeploymentResponse = deploycfgs_resp?.json()?; // Bind json of reply to struct.
     // Get the timestamp of the last deployments.
@@ -138,24 +140,31 @@ fn get_shelflife_info(
             deploys.push(DateTime::parse_from_rfc3339(&condition.last_update_time));
         }
     }
-    
-    // Default to using latest deploymentconfig date if there are no builds available,
-    // Otherwise compare build dates to see if there's a later one that can be used
-    // instead.
-    let latest_deploy = deploys.last().unwrap().unwrap();
-    let mut latest_update = latest_deploy;
-    let mut cause = "Deployment";
+
+    if deploys.len() > 0 {
+        // If it exists, default to using latest deploymentconfig date if there are no
+        // builds available.
+        let latest_deploy = deploys.last().unwrap().unwrap();
+        latest_update = latest_deploy;
+        cause = "Deployment";
+    }
+
     if builds.len() != 0 {
+        // Compare the latest build date with the current latest update date, which could be
+        // either the creation date or the latest deployment date. If the latest build happened
+        // later, use that.
         let latest_build = builds.last().unwrap().unwrap();
-        // If the app was deployed after it was built, use the deploy time as the latest
-        // update, otherwise, use the build time.
-        if latest_deploy.signed_duration_since(latest_build) > chrono::Duration::seconds(0) {
-            latest_update = latest_deploy;
-            cause = "Deployment";
-        } else {
+        if latest_update.signed_duration_since(latest_build) < chrono::Duration::seconds(0) {
             latest_update = latest_build;
             cause = "Build";
-        }
+        } 
+        /*
+        // If the app was deployed after it was built, use the deploy time as the latest
+        // update, otherwise, use the build time.
+        else {
+            latest_update = latest_build;
+            cause = "Build";
+        }*/
     }
 
     // Query rolebindings for the admins of the namespace
@@ -417,6 +426,7 @@ fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem
             let mut doc_name = String::new();
             let mut doc_admins: Vec<String> = Vec::new();
             let mut doc_last_deployment = String::new();
+            let mut doc_cause = String::new();
             if let Some(&Bson::String(ref name)) = item.get("name") {
                 doc_name = name.to_string();
             }
@@ -429,11 +439,14 @@ fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem
             if let Some(&Bson::String(ref last_deployment)) = item.get("last_update") {
                 doc_last_deployment = last_deployment.to_string();
             }
+            if let Some(&Bson::String(ref cause)) = item.get("cause") {
+                doc_cause = cause.to_string();
+            }
             let namespace_document = DBItem {
                 name: doc_name.as_str().to_string(),
                 admins: doc_admins,
                 last_update: doc_last_deployment,
-                cause: "Deployment".to_string(),
+                cause: doc_cause.to_string(),
             };
             namespace_table.push(namespace_document);
         }
