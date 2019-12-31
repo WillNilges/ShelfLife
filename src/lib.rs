@@ -17,8 +17,6 @@ use lettre::smtp::authentication::{Credentials, Mechanism};
 use lettre::{Transport, SmtpClient};
 use lettre::smtp::ConnectionReuseParameters;
 use lettre_email::Email;
-use std::io;
-use std::io::prelude::*;
 use std::process::Command;
 use std::env;
 
@@ -68,31 +66,35 @@ pub fn query_known_namespace(
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
     let queried_namespace = namespace_info.name.to_string();
     if !current_table.iter().any(|x| x.name.to_string() == queried_namespace) {
-        
+        let mut add = false;
+        println!("This namespace ({}) is not in the database! ", queried_namespace);
         if !autoadd {
+            println!("Would you like to add it? (y/n): ");
             let mut input = String::new();
-            print!("\nThis namespace ({}) is not in the database! Would you like to add it? (y/n): ", queried_namespace);
-            let stdin = io::stdin();
-            let input = String::new();
-            for line in stdin.lock().lines() {
-                input = line.unwrap();
-                //println!("{}", line.unwrap());
+            while !add {
+                std::io::stdin().read_line(&mut input).expect("Could not read response");
+                dbg!(&input.trim());
+                if input.trim() == "y".to_string() {
+                    add = true;
+                } else if input.trim() == "n".to_string() {
+                    println!("Ok. Not adding.");
+                    return Ok(());
+                } else {
+                    println!("Invalid response.");
+                }
             }
-            if input.trim() == "y" {
-                autoadd = true;
-            } else {
-                println!("Ok. Not adding.");
-                
-            }
+        } else {
+            dbg!("GO FUCK YOURSELF"); // TODO: Remove
         }
 
-        if autoadd {
+        if autoadd || add {
              match collection.as_ref() {
                 "graylist" => {
                     println!("Graylisting {}\n", queried_namespace);
                 }
                 "whitelist" => {
                     println!("Whitelisting {}\n", queried_namespace);
+                    print!("Removing theoretical greylist entry... ");
                     let _db_result = remove_db_item(mongo_client, "graylist", &queried_namespace);
                 }
                 _ => {
