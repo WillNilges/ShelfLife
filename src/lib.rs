@@ -67,7 +67,7 @@ pub fn query_known_namespace(
     let queried_namespace = namespace_info.name.to_string();
     if !current_table.iter().any(|x| x.name.to_string() == queried_namespace) {
         let mut add = false;
-        println!("This namespace ({}) is not in the database! ", queried_namespace);
+        println!("This namespace ({}) is not in the database. ", queried_namespace);
         let whitelist: Vec<DBItem> = get_db(mongo_client, "whitelist")?;
         if whitelist.iter().any(|x| x.name.to_string() == queried_namespace) && collection == "graylist".to_string() {
             println!("However, it's whitelisted. Skipping...");
@@ -88,7 +88,7 @@ pub fn query_known_namespace(
                     dbg!(&input.trim());
                 }
             }
-        }
+        } else {println!("Adding...")}
         
         if autoadd || add {
              match collection.as_ref() {
