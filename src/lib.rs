@@ -83,10 +83,8 @@ pub fn query_known_namespace(
                     println!("Invalid response.");
                 }
             }
-        } else {
-            dbg!("GO FUCK YOURSELF"); // TODO: Remove
         }
-
+        
         if autoadd || add {
              match collection.as_ref() {
                 "graylist" => {
