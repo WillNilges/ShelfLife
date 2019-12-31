@@ -24,7 +24,7 @@ It will also have an interactive mode for setup, configuration, and monitoring.
 
 ## Build Dependencies
 
-### Ubuntu (18.04 recommended)
+### Ubuntu (Server 18.04 recommended)
 
 - `build-essential`
 - `libssl-dev`
@@ -45,7 +45,7 @@ To use this app, you'll need a few things:
 
 * An Openshift cluster that can be accessed via API calls
 * An admin™ account for ShelfLife to view and manage namespaces
-* MongoDB installed and running
+* MongoDB installed and running (https://docs.mongodb.com/manual/tutorial/install-mongodb-on-ubuntu/)
 * A .env file to store Openshift cluster information, DB information, and a few
   other miscellaneous things. Get started by copying the provided `.env.sample`
   file to `.env` and then fill in the appropriate values.
