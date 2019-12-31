@@ -30,6 +30,15 @@ It will also have an interactive mode for setup, configuration, and monitoring.
 - `libssl-dev`
 - `pkg-config`
 
+## Setup
+
+- Install the latest MongoDB on your server and make sure the service is enabled. ShelfLife will take care of the rest.
+
+```
+git clone https://www.github.com/willnilges/shelflife
+cargo build
+```
+
 ## Usage
 
 To use this app, you'll need a few things:
