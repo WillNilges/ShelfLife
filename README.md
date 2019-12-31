@@ -46,14 +46,17 @@ USAGE:
     shelflife [FLAGS] [OPTIONS]
 
 FLAGS:
-    -a, --all          Queries all available namespaces
+    -a, --all          Queries all available namespaces and adds/updates any that are missing/outdated to the database.
+    -c, --cull         Checks greylist for projects that need attention. Takes appropriate course of action.
     -h, --help         Prints help information
+    -l, --list         Print namespaces currently tracked in the database.
     -V, --version      Prints version information
-    -v, --view         Print namespaces currently tracked in MongoDB
-    -w, --whitelist    Determines working with the whitelist or the shelflife table
+    -w, --whitelist    Enables whitelist mode for that command, performing operations on the whitelist instead of the
+                       greylist.
 
 OPTIONS:
-    -d, --delete <NAMESPACE>     Deletes a namespace out of MongoDB
-    -k, --known <NAMESPACE>      Query API and Database for a known namespace
-    -p, --project <NAMESPACE>    Query API for project info about a namespace
+    -d, --delete <NAMESPACE>     Removes a namespace from the database.
+    -k, --known <NAMESPACE>      Query API and ShelfLife Database for a known namespace. If it is missing from the
+                                 database, the user is is asked if they want to add it.
+    -p, --project <NAMESPACE>    Query API for project info about a namespace.
 ```
