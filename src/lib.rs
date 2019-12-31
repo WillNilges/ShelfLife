@@ -135,7 +135,7 @@ fn get_shelflife_info(
     // Query for builds
     let builds_call = format!("https://{}/apis/build.openshift.io/v1/namespaces/{}/builds",endpoint, namespace); // Formulate the call
     let builds_resp = get_call_api(&http_client, &builds_call); // Make the call
-    let builds_json: BuildlistResponse = builds_resp?.json()?; // Bind json of reply to struct.
+    let builds_json: BuildlistResponse = builds_resp?.json(); // Bind json of reply to struct.
     let mut builds = Vec::new();
     for item in builds_json.items {
         builds.push(DateTime::parse_from_rfc3339(&item.status.completion_timestamp));

@@ -32,12 +32,13 @@ It will also have an interactive mode for setup, configuration, and monitoring.
 
 ## Setup
 
-- Install the latest MongoDB on your server and make sure the service is enabled. ShelfLife will take care of the rest.
-
+- Clone the repo and run the install script.
 ```
 git clone https://www.github.com/willnilges/shelflife
-cargo build
+./install.sh
 ```
+- Configure the .env file with your cluster information and email information.
+- Go to town.
 
 ## Usage
 
