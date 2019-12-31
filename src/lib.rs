@@ -135,12 +135,19 @@ fn get_shelflife_info(
     // Query for builds
     let builds_call = format!("https://{}/apis/build.openshift.io/v1/namespaces/{}/builds",endpoint, namespace); // Formulate the call
     let builds_resp = get_call_api(&http_client, &builds_call); // Make the call
-    let builds_json: BuildlistResponse = builds_resp?.json()?; // Bind json of reply to struct.
+    // let builds_json_result = builds_resp?.json(); // Bind json of reply to struct.
     let mut builds = Vec::new();
+    // Get the timestamp of the last builds.
+    let builds_json: BuildlistResponse = builds_resp?.json()?;
     for item in builds_json.items {
-        builds.push(DateTime::parse_from_rfc3339(&item.status.completion_timestamp));
+        if let Some(x) = &item.status.completion_timestamp {
+            builds.push(DateTime::parse_from_rfc3339(x)?);
+        } else {
+            println!("Error fetching build timestamp.");
+        }
     }
-    
+    builds.sort();
+
     // Query deployment configs
     // Formulate the call
     let deploycfgs_call = format!("https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs", endpoint, namespace);
@@ -150,23 +157,23 @@ fn get_shelflife_info(
     let mut deploys = Vec::new();
     for config in deploycfgs_json.items {
         for condition in config.status.conditions {
-            deploys.push(DateTime::parse_from_rfc3339(&condition.last_update_time));
+            deploys.push(DateTime::parse_from_rfc3339(&condition.last_update_time)?);
         }
     }
+    deploys.sort();
 
     if deploys.len() > 0 {
         // If it exists, default to using latest deploymentconfig date if there are no
         // builds available.
-        let latest_deploy = deploys.last().unwrap().unwrap();
-        latest_update = latest_deploy;
+        latest_update = *deploys.last().unwrap();
         cause = "Deployment";
     }
 
-    if builds.len() != 0 {
+    if builds.len() > 0 {
         // Compare the latest build date with the current latest update date, which could be
         // either the creation date or the latest deployment date. If the latest build happened
         // later, use that.
-        let latest_build = builds.last().unwrap().unwrap();
+        let latest_build = *builds.last().unwrap();
         if latest_update.signed_duration_since(latest_build) < chrono::Duration::seconds(0) {
             latest_update = latest_build;
             cause = "Build";
@@ -513,6 +520,6 @@ pub fn remove_db_item(mongo_client: &mongodb::Client, collection: &str, namespac
         .collection(collection);
     coll.find_one_and_delete(doc! {"name": namespace}, None)
         .unwrap();
-    println!("{} has been removed.", namespace);
+    println!("{} has been removed from db.", namespace);
     Ok(())
 }
