@@ -91,10 +91,6 @@ fn main() -> Result<()> {
     }
  
     if matches.occurrences_of("cull") > 0 {
-        /*let proj_names = get_project_names(&http_client);
-        for project in proj_names.unwrap() {
-            query_known_namespace(&mongo_client, collection, &http_client, &project, true)?;
-        }*/
         let _expiration = check_expiry_dates(&http_client, &mongo_client, collection);
     }
 
@@ -104,10 +100,6 @@ fn main() -> Result<()> {
     
     if let Some(known_namespace) = matches.value_of("known") {
         query_known_namespace(&mongo_client, collection, &http_client, known_namespace, false)?;
-        //let call = "https://okd.csh.rit.edu:8443/apis/build.openshift.io/v1/namespaces/swag/builds";
-        //let call = "https://okd.csh.rit.edu:8443/apis/apps.openshift.io/v1/namespaces/swag/deploymentconfigs";
-        //let result = get_call_api(&http_client, &call, &token);
-        //dbg!(result);
     }
 
     if let Some(project_name) = matches.value_of("project") {

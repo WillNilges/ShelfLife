@@ -17,8 +17,8 @@ use lettre::smtp::authentication::{Credentials, Mechanism};
 use lettre::{Transport, SmtpClient};
 use lettre::smtp::ConnectionReuseParameters;
 use lettre_email::Email;
-use std::env;
 use std::process::Command;
+use std::env;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -44,7 +44,6 @@ pub fn get_project_names(http_client: &reqwest::Client) -> Result<Vec<String>> {
             dbg!(&projects_resp);
         },
     }
-    // Ok(())
     Ok(projects)
 }
 
@@ -67,29 +66,42 @@ pub fn query_known_namespace(
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
     let queried_namespace = namespace_info.name.to_string();
     if !current_table.iter().any(|x| x.name.to_string() == queried_namespace) {
-        let mut input = "n".to_string();
+        let mut add = false;
+        println!("This namespace ({}) is not in the database! ", queried_namespace);
         if !autoadd {
-            println!("\nThis namespace ({}) is not in the database! Would you like to add it? (y/n): ", queried_namespace);
-            std::io::stdin().read_line(&mut input).expect("Could not read response");
+            println!("Would you like to add it? (y/n): ");
+            let mut input = String::new();
+            while !add {
+                std::io::stdin().read_line(&mut input).expect("Could not read response");
+                dbg!(&input.trim());
+                if input.trim() == "y".to_string() {
+                    add = true;
+                } else if input.trim() == "n".to_string() {
+                    println!("Ok. Not adding.");
+                    return Ok(());
+                } else {
+                    println!("Invalid response.");
+                }
+            }
         } else {
-            input = "y".to_string();
+            dbg!("GO FUCK YOURSELF"); // TODO: Remove
         }
-        
-        if input.trim() == "y" {
+
+        if autoadd || add {
              match collection.as_ref() {
                 "graylist" => {
-                    println!("Putting a ShelfLife on {}\n", queried_namespace);
+                    println!("Graylisting {}\n", queried_namespace);
                 }
                 "whitelist" => {
                     println!("Whitelisting {}\n", queried_namespace);
+                    print!("Removing theoretical greylist entry... ");
+                    let _db_result = remove_db_item(mongo_client, "graylist", &queried_namespace);
                 }
                 _ => {
                     println!("Unknown table:\n");
                 }
             }
             let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
-        } else if input.trim() == "n" {
-            println!("Ok. Not adding.");
         } else {
             println!("Invalid response.");
         }
@@ -97,9 +109,7 @@ pub fn query_known_namespace(
         println!("The requested namespace is in the database. Updating entry...");
         let _db_result = remove_db_item(mongo_client, collection, &queried_namespace);
         let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
-        println!("Entry updated.")
-
-
+        println!("Entry updated.");
     }
     Ok(())
 }
@@ -157,14 +167,7 @@ fn get_shelflife_info(
         if latest_update.signed_duration_since(latest_build) < chrono::Duration::seconds(0) {
             latest_update = latest_build;
             cause = "Build";
-        } 
-        /*
-        // If the app was deployed after it was built, use the deploy time as the latest
-        // update, otherwise, use the build time.
-        else {
-            latest_update = latest_build;
-            cause = "Build";
-        }*/
+        }
     }
 
     // Query rolebindings for the admins of the namespace
@@ -420,7 +423,6 @@ pub fn delete_call_api(http_client: &reqwest::Client, call: &str,) -> Result<req
 /*                                  DATABASE FUNCTIONS  */
 /*  --------------------------------------------------  */
 
-
 fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem>> {
     let coll = mongo_client
         .db("SHELFLIFE")
@@ -490,7 +492,6 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
     Ok(())
 }
 
-
 fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
     dbg!(&item.last_update);
@@ -500,7 +501,6 @@ fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem
     coll.insert_one(doc!{"name": item.name, "admins": bson::to_bson(&item.admins)?, "last_update": item.last_update, "cause": item.cause}, None).unwrap();
     Ok(())
 }
-
 
 pub fn remove_db_item(mongo_client: &mongodb::Client, collection: &str, namespace: &str) -> Result<()> {
     // Direct connection to a server. Will not look for other servers in the topology.
