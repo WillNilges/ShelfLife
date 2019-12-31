@@ -68,9 +68,9 @@ fn main() -> Result<()> {
             .value_name("NAMESPACE")
             .help("Query API for project info about a namespace.")
             .takes_value(true))
-        .arg(Arg::with_name("view")
-            .short("v")
-            .long("view")
+        .arg(Arg::with_name("list")
+            .short("l")
+            .long("list")
             .help("Print namespaces currently tracked in the database."))
         .arg(Arg::with_name("whitelist")
             .short("w")
@@ -108,7 +108,7 @@ fn main() -> Result<()> {
         dbg!(result);
     }
 
-    if matches.occurrences_of("view") > 0 {
+    if matches.occurrences_of("list") > 0 {
         view_db(&mongo_client, collection)?;
     }
 

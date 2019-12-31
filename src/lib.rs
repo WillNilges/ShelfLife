@@ -68,12 +68,16 @@ pub fn query_known_namespace(
     if !current_table.iter().any(|x| x.name.to_string() == queried_namespace) {
         let mut add = false;
         println!("This namespace ({}) is not in the database! ", queried_namespace);
+        let whitelist: Vec<DBItem> = get_db(mongo_client, "whitelist")?;
+        if whitelist.iter().any(|x| x.name.to_string() == queried_namespace) && collection == "graylist".to_string() {
+            println!("However, it's whitelisted. Skipping...");
+            return Ok(());
+        }
         if !autoadd {
             println!("Would you like to add it? (y/n): ");
             let mut input = String::new();
             while !add {
                 std::io::stdin().read_line(&mut input).expect("Could not read response");
-                dbg!(&input.trim());
                 if input.trim() == "y".to_string() {
                     add = true;
                 } else if input.trim() == "n".to_string() {
@@ -81,6 +85,7 @@ pub fn query_known_namespace(
                     return Ok(());
                 } else {
                     println!("Invalid response.");
+                    dbg!(&input.trim());
                 }
             }
         }
@@ -91,7 +96,7 @@ pub fn query_known_namespace(
                     println!("Graylisting {}\n", queried_namespace);
                 }
                 "whitelist" => {
-                    println!("Whitelisting {}\n", queried_namespace);
+                    println!("Whitelisting {}...\n", queried_namespace);
                     print!("Removing theoretical greylist entry... ");
                     let _db_result = remove_db_item(mongo_client, "graylist", &queried_namespace);
                 }
