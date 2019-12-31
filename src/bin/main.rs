@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         .arg(Arg::with_name("cull")
             .short("c")
             .long("cull")
-            .help("Queries all available namespaces and adds/updates any that are missing/outdated to the database and then checks for projects to delete."))
+            .help("Checks greylist for projects that need attention. Takes appropriate course of action."))
         .arg(Arg::with_name("delete")
             .short("d")
             .long("delete")
