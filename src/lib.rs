@@ -269,9 +269,15 @@ pub fn check_expiry_dates(
                             .from(addr)
                             .subject("Hi, I nuked your project :)")
                             .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project in your homedir at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
-                            .build()
-                            .unwrap();
-                        let _mail_result = mailer.send(email.into());
+                            .build();
+                        match email {
+                            Err(err) => {
+                                println!("Could not send email. Invalid email address?");
+                            },
+                            _ => {
+                                let _mail_result = mailer.send(email.unwrap().into());
+                            }
+                        }
                     }
 
                 }else if age > chrono::Duration::weeks(16) {
@@ -315,9 +321,15 @@ pub fn check_expiry_dates(
                             .from(addr)
                             .subject("Your project's resources have been revoked.")
                             .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 8 weeks.", &item.name, &item.last_update))
-                            .build()
-                            .unwrap();
-                        let _mail_result = mailer.send(email.into());
+                            .build();
+                        match email {
+                            Err(err) => {
+                                println!("Could not send email. Invalid email address?");
+                            },
+                            _ => {
+                                let _mail_result = mailer.send(email.unwrap().into());
+                            }
+                        }
                     }
                 }else  if age > chrono::Duration::weeks(12) {
                     println!("The last update to {} was more than 12 weeks ago.", &item.name);
@@ -329,9 +341,15 @@ pub fn check_expiry_dates(
                             .from(addr)
                             .subject(format!("Old OKD project: {}", &item.name))
                             .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
-                            .build()
-                            .unwrap();
-                        let _mail_result = mailer.send(email.into());
+                            .build();
+                        match email {
+                            Err(err) => {
+                                println!("Could not send email. Invalid email address?");
+                            },
+                            _ => {
+                                let _mail_result = mailer.send(email.unwrap().into());
+                            }
+                        }
                     }
                 } else {
                     println!(" ok.");
