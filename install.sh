@@ -13,8 +13,8 @@ source $HOME/.cargo/env
 echo Install build deps
 sudo apt install -y build-essential libssl-dev pkg-config
 
-git clone http://www.github.com/willnilges/shelflife
-cd shelflife
+#git clone http://www.github.com/willnilges/shelflife
+#cd shelflife
 cp .env.sample .env
 cargo build
 echo Repo cloned! Please fill out the .env file!

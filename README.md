@@ -32,10 +32,12 @@ It will also have an interactive mode for setup, configuration, and monitoring.
 
 ## Setup
 
-<<<<<<< HEAD
 - Clone the repo and run the install script.
-=======
-- Install the latest MongoDB on your server and make sure the service is enabled.
+```
+git clone https://www.github.com/willnilges/shelflife
+./install.sh
+```
+
 - Run the following commands on your openshift cluster:
 
 ```
@@ -45,17 +47,7 @@ oc get token shelflife-dev-bot # Spits out the API token.
 ```
 
 - Copy the API token, cluster URL, and email credentials into the .env file.
-
-- set up a cron job to run `shelflife -c` once per week (Since it generally measures project age in weeks, once a week is fine).
-
-- ShelfLife will take care of the rest.
-
->>>>>>> 3b64875200c4106ab0c2b33ebe84db64ee668c03
-```
-git clone https://www.github.com/willnilges/shelflife
-./install.sh
-```
-- Configure the .env file with your cluster information and email information.
+- Configure the .env file with your email information.
 - Go to town.
 
 ## Usage
