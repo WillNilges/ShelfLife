@@ -48,7 +48,7 @@ pub struct PodsResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BuildStatus {
-    pub completion_timestamp: String,
+    pub completion_timestamp: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

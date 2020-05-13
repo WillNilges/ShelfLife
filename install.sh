@@ -16,7 +16,14 @@ sudo apt install -y build-essential libssl-dev pkg-config
 git clone http://www.github.com/willnilges/shelflife
 cd shelflife
 cp .env.sample .env
+cargo build
 echo Repo cloned! Please fill out the .env file!
 
-# TODO: I wanted to add somehting else here... I don't remember what that was.
-# AHA! TODO: CHRON JOB CONFIG! Ask the user what they want
+# Cron job config. Ask the user what they want
+echo Enter cron job parameters:
+read cron_params
+
+crontab -l > mycron
+echo "$cron_params $(pwd)/target/debug/shelflife -c" >> mycron
+crontab mycron
+rm mycron
