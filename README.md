@@ -32,7 +32,20 @@ It will also have an interactive mode for setup, configuration, and monitoring.
 
 ## Setup
 
-- Install the latest MongoDB on your server and make sure the service is enabled. ShelfLife will take care of the rest.
+- Install the latest MongoDB on your server and make sure the service is enabled.
+- Run the following commands on your openshift cluster:
+
+```
+oc create sa shelflife-dev-bot # Create a service account for shelflife to use.
+oc adm policy add-cluster-role-to-user cluster-admin system:serviceaccount:default:shelflife-dev-bot # Make the service account an admin on your cluster.
+oc get token shelflife-dev-bot # Spits out the API token.
+```
+
+- Copy the API token, cluster URL, and email credentials into the .env file.
+
+- set up a cron job to run `shelflife -c` once per hour (or however frequently you want it to run).
+
+- ShelfLife will take care of the rest.
 
 ```
 git clone https://www.github.com/willnilges/shelflife
