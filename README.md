@@ -43,7 +43,7 @@ oc get token shelflife-dev-bot # Spits out the API token.
 
 - Copy the API token, cluster URL, and email credentials into the .env file.
 
-- set up a cron job to run `shelflife -c` once per hour (or however frequently you want it to run).
+- set up a cron job to run `shelflife -c` once per week (Since it generally measures project age in weeks, once a week is fine).
 
 - ShelfLife will take care of the rest.
 

@@ -221,6 +221,7 @@ pub fn check_expiry_dates(
     let email_uname = env::var("EMAIL_UNAME")?;
     let email_passwd = env::var("EMAIL_PASSWD")?;
     let email_addr = env::var("EMAIL_ADDRESS")?;
+    let email_domain = env::var("EMAIL_DOMAIN")?;
 
     let mut mailer = SmtpClient::new_simple(&email_srv).unwrap()
         .credentials(Credentials::new(email_uname.to_string(), email_passwd.to_string()))
@@ -265,7 +266,7 @@ pub fn check_expiry_dates(
                         println!("Notifying {}", &strpname);
                         let strpname = name.replace("\"", "");
                         let email = Email::builder()
-                            .to((format!("{}@csh.rit.edu", strpname), strpname)) //TODO: .env variable for email domain. Need to figure out how I can get someone's custom email. I'm guessing that not everyone is going to have the same domain in an org. Low priority.
+                            .to((format!("{}@{}", strpname, email_domain), strpname)) //TODO: .env variable for email domain. Need to figure out how I can get someone's custom email. I'm guessing that not everyone is going to have the same domain in an org. Low priority.
                             .from(addr)
                             .subject("Hi, I nuked your project :)")
                             .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project in your homedir at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
@@ -317,7 +318,7 @@ pub fn check_expiry_dates(
                         let strpname = name.replace("\"", "");
                         println!("Notifying {}", &strpname);
                         let email = Email::builder()
-                            .to((format!("{}@csh.rit.edu", strpname), strpname))
+                            .to((format!("{}@{}", strpname, email_domain), strpname))
                             .from(addr)
                             .subject("Your project's resources have been revoked.")
                             .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 8 weeks.", &item.name, &item.last_update))
@@ -337,7 +338,7 @@ pub fn check_expiry_dates(
                         let strpname = name.replace("\"", "");
                         println!("Notifying {}", &strpname);
                         let email = Email::builder()
-                            .to((format!("{}@csh.rit.edu", strpname), strpname))
+                            .to((format!("{}@{}", strpname, email_domain), strpname))
                             .from(addr)
                             .subject(format!("Old OKD project: {}", &item.name))
                             .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
