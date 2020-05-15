@@ -73,6 +73,14 @@ pub fn query_known_namespace(
             println!("However, it's whitelisted. Skipping...");
             return Ok(());
         }
+        if namespace_info.admins.len() == 0 {
+            println!("However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...");
+            return Ok(());
+        }
+        if namespace_info.name == "management-infra" {
+            println!("This looks like something important. Skipping...");
+            return Ok(());
+        }
         if !autoadd {
             println!("Would you like to add it? (y/n): ");
             let mut input = String::new();
