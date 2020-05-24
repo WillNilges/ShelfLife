@@ -83,3 +83,8 @@ OPTIONS:
                                  database, the user is is asked if they want to add it.
     -p, --project <NAMESPACE>    Query API for project info about a namespace.
 ```
+
+## Build and Run in Docker
+```
+docker build -t shelflife . && docker run --rm -it shelflife
+```
