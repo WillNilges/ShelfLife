@@ -7,7 +7,7 @@ use regex::Regex;
 
 use std::{env, io};
 use std::io::Write;
-use clap::{Arg, App, AppSettings};
+use clap::{SubCommand, Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
@@ -52,72 +52,77 @@ fn main() -> Result<()> {
         io::stdout().flush().expect("Couldn't flush stdout");
         let mut input = String::new();
         io::stdin().read_line(&mut input).expect("Error reading input.");
+        //let input2 = input.replace("\n", "");
+        //let args = input2.split(" ").collect::<Vec<&str>>();
         let args = WORD.captures_iter(&input)
                    .map(|cap| cap.get(1).or(cap.get(2)).unwrap().as_str())
                    .collect::<Vec<&str>>();
-
         dbg!(&args);
-        
-        let matches = App::new("ShelfLife")
-            .author("Willard N. <willnilges@mail.rit.edu>")
-            .about("Automatic spin-down and deletion management of OKD projects.")
-            //.setting(AppSettings::ArgRequiredElseHelp)
-            .arg(Arg::with_name("all")
-                .short("a")
-                .long("all")
-                .help("Queries all available namespaces and adds/updates any that are missing/outdated to the database."))
-            .arg(Arg::with_name("cull")
-                .short("c")
-                .long("cull")
-                .help("Checks greylist for projects that need attention. Takes appropriate course of action."))
-            .arg(Arg::with_name("delete")
-                .short("d")
-                .long("delete")
-                .value_name("NAMESPACE")
-                .help("Removes a namespace from the database.")
-                .takes_value(true))
-            .arg(Arg::with_name("known")
-                .short("k")
-                .long("known")
-                .value_name("NAMESPACE")
-                .help("Query API and ShelfLife Database for a known namespace. If it is missing from the database, the user is is asked if they want to add it.")
-                .takes_value(true))
-            .arg(Arg::with_name("project")
-                .short("p")
-                .long("project")
-                .value_name("NAMESPACE")
-                .help("Query API for project info about a namespace.")
-                .takes_value(true))
-            .arg(Arg::with_name("list")
-                .short("l")
-                .long("list")
-                .help("Print namespaces currently tracked in the database."))
-            .arg(Arg::with_name("whitelist")
-                .short("w")
-                .long("whitelist")
-                .help("Enables whitelist mode for that command, performing operations on the whitelist instead of the greylist."))
-            .get_matches_from(args);
 
-        dbg!(matches);
+        //println!("{}", args[0]);
+
+
+    let matches = App::new("shelflife")
+        .author("Willard N. <willnilges@mail.rit.edu>")
+        .about("Automatic spin-down and deletion management of OKD projects.")
+        .setting(AppSettings::NoBinaryName)
+        .setting(AppSettings::ArgRequiredElseHelp)
+        .subcommand(SubCommand::with_name("all")
+            .help("Queries all available namespaces and adds/updates any that are missing/outdated to the database."))
+        .subcommand(SubCommand::with_name("cull")
+            .help("Checks greylist for projects that need attention. Takes appropriate course of action."))
+        .subcommand(SubCommand::with_name("list")
+            .help("Print namespaces currently tracked in the database."))
+        .subcommand(SubCommand::with_name("delete")
+            .arg(Arg::with_name("namespace01")
+                .takes_value(true)
+                .index(1))
+            .help("Removes a namespace from the database."))
+        .arg(Arg::with_name("known")
+            .short("k")
+            .long("known")
+            .value_name("NAMESPACE")
+            .help("Query API and ShelfLife Database for a known namespace. If it is missing from the database, the user is is asked if they want to add it.")
+            .takes_value(true))
+        .arg(Arg::with_name("project")
+            .short("p")
+            .long("project")
+            .value_name("NAMESPACE")
+            .help("Query API for project info about a namespace.")
+            .takes_value(true))
+        .arg(Arg::with_name("whitelist")
+            .short("w")
+            .long("whitelist")
+            .help("Enables whitelist mode for that command, performing operations on the whitelist instead of the greylist."))
+        .get_matches_from(args);
+
+        dbg!(&matches);
 
         let mut collection = "graylist";
         if matches.occurrences_of("whitelist") > 0 {
             collection = "whitelist";
         }
 
-        if matches.occurrences_of("all") > 0 {
+        if let Some(_subcommand) = matches.subcommand_matches("all") {
             let proj_names = get_project_names(&http_client);
             for project in proj_names.unwrap() {
                 query_known_namespace(&mongo_client, collection, &http_client, &project, true)?;
             }
         }
      
-        if matches.occurrences_of("cull") > 0 {
+        if let Some(_subcommand) = matches.subcommand_matches("cull") {
             let _expiration = check_expiry_dates(&http_client, &mongo_client, collection);
         }
-
-        if let Some(deleted) = matches.value_of("delete") {
-            remove_db_item(&mongo_client, collection, deleted)?;
+        
+        if let Some(_subcommand) = matches.subcommand_matches("list") {
+            view_db(&mongo_client, collection)?;
+        }
+        
+        if let Some(subcommand) = matches.subcommand_matches("delete") {
+           dbg!(matches.value_of("namespace01")); 
+            if let Some(deleted) = matches.value_of("namespace01") {
+                remove_db_item(&mongo_client, collection, deleted)?;
+            }
         }
         
         if let Some(known_namespace) = matches.value_of("known") {
@@ -130,10 +135,8 @@ fn main() -> Result<()> {
             dbg!(result);
         }
 
-        if matches.occurrences_of("list") > 0 {
-            view_db(&mongo_client, collection)?;
-        }
+        
     
     }
-    //Ok(())
-}
+    //Ok()
+    }
