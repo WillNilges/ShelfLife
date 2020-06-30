@@ -14,5 +14,6 @@ RUN apt-get update -y && apt-get upgrade -y && apt-get install libssl-dev -y
 WORKDIR /usr/local/bin
 COPY --from=builder /usr/local/cargo/bin/shelflife .
 USER 1001
-ENTRYPOINT ["shelflife"]
+#ENTRYPOINT ["shelflife"]
 #CMD ["./shelflife"]
+CMD ["bash"]
