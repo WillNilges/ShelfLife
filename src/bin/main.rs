@@ -60,7 +60,7 @@ fn main() -> Result<()> {
             .short("k")
             .long("known")
             .value_name("NAMESPACE")
-            .help("Query API and ShelfLife Database for a known namespace. If it is missing from the database, the user is is asked if they want to add it.")
+            .help("Query API and ShelfLife Database for a known namespace. If it is missing from the database, the user is asked if they want to add it.")
             .takes_value(true))
         .arg(Arg::with_name("project")
             .short("p")
