@@ -438,29 +438,30 @@ pub fn export_project(project: &str) -> Result<()> {
     let token = env::var("OKD_TOKEN")?;
     let endpoint = env::var("ENDPOINT")?;
     let fail = "failed to execute process";
-    let path = "/home/wilnil/shelflife_backup";
+    let path = env::var("BACKUP_PATH")?; // One should hope this is somewhere they have write access to.
 
     // Export project
-    Command::new("sh").arg("-c").arg(format!("mkdir {}", path))
+    Command::new("sh").arg("-c").arg(format!("mkdir {}", &path))
     .current_dir("/").status().expect(fail);
     Command::new("sh").arg("-c").arg(format!("oc login https://{} --token={}", endpoint, token))
-    .current_dir(path).status().expect(fail);
-    Command::new("sh").arg("-c").arg(format!("mkdir {}/{}", path, project))
-    .current_dir(path).output().expect(fail);
+    .current_dir(&path).status().expect(fail);
+    Command::new("sh").arg("-c").arg(format!("mkdir {}/{}", &path, project))
+    .current_dir(&path).output().expect(fail);
     Command::new("sh").arg("-c").arg(format!("oc project {}", project))
-    .current_dir(path).output().expect(fail);
+    .current_dir(&path).output().expect(fail);
     Command::new("sh").arg("-c").arg(format!("oc get -o yaml --export all > {}/project.yaml", project))
-    .current_dir(path).output().expect(fail);
+    .current_dir(&path).output().expect(fail);
     println!("Done with GET for export all");
     let items = vec!["rolebindings", "serviceaccounts", "secrets", "imagestreamtags", "podpreset", "cms", "egressnetworkpolicies", "rolebindingrestrictions", "limitranges", "resourcequotas", "pvcs", "templates", "cronjobs", "statefulsets", "hpas", "deployments", "replicasets", "poddisruptionbudget", "endpoints"];
     for object in items {
         Command::new("sh").arg("-c").arg(format!("oc get -o yaml --export {} > {}/{}.yaml", object, project, object))
-    .current_dir(path).output().expect(fail);
+        .current_dir(&path).output().expect(fail);
         println!("Done with GET for export {}", object);
     }
 
     //Compress it
-    Command::new("sh").arg("-c").arg(format!("zip -r {}.zip {}", project, project)).current_dir(path).output().expect(fail); 
+    Command::new("sh").arg("-c").arg(format!("zip -r {}.zip {}", project, project))
+    .current_dir(&path).output().expect(fail); 
     Ok(())
 }
 
