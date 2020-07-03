@@ -231,10 +231,11 @@ pub fn check_expiry_dates(
     let email_addr = env::var("EMAIL_ADDRESS")?;
     let email_domain = env::var("EMAIL_DOMAIN")?;
 
-    let send_or_nah = env::var("SENDMAIL")?;
+    // See if we should email anyone about what we're doing. This is mostly for development purposes. Please tell your clients when you delete their shit.
+    let send_mail = env::var("SEND_MAIL")?;
     let mut usemail = false;
 
-    match send_or_nah.as_str() {
+    match send_mail.as_str() {
         "true" => {
             println!("Configured to send mail.");
             usemail = true;
@@ -249,6 +250,23 @@ pub fn check_expiry_dates(
             //usemail = false;
         },
     }
+
+    // See if we should email root.
+    let mail_root = env::var("MAIL_ROOT")?;
+    let mut send_to_root = false;
+
+    match mail_root.as_str() {
+        "true" => {
+            println!("Configured to send mail to root.");
+            send_to_root = true;
+        },
+        "false" => {
+            println!("Configured to NOT send mail to root.");
+        },
+        _ => {
+            println!("Can't find mail_root. Assuming I should NOT send mail to root!");
+        },
+    } 
 
     println!("Got all env variables.");
 
@@ -295,22 +313,27 @@ pub fn check_expiry_dates(
                         println!("Notifying admins...");
                         for name in item.admins.iter() {
                             let strpname = name.replace("\"", "");
-                            println!("Notifying {}", &strpname);
-                            let strpname = name.replace("\"", "");
-                            let email = Email::builder()
-                                .to((format!("{}@{}", strpname, email_domain), strpname))
-                                .from(addr)
-                                .subject("Hi, I nuked your project :)")
-                                .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project in your homedir at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
-                                .build();
-                            match email {
-                                Err(_err) => {
-                                    println!("Could not send email. Invalid email address?");
-                                },
-                                _ => {
-                                    let _mail_result = mailer.send(email.unwrap().into());
+                            if !send_to_root && &strpname == "root" {
+                                println!("I am NOT going to email root.");
+                            } else {
+                                println!("Notifying {}", &strpname);
+                                let strpname = name.replace("\"", "");
+                                let email = Email::builder()
+                                    .to((format!("{}@{}", strpname, email_domain), strpname))
+                                    .from(addr)
+                                    .subject("Hi, I nuked your project :)")
+                                    .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project in your homedir at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
+                                    .build();
+                                match email {
+                                    Err(_err) => {
+                                        println!("Could not send email. Invalid email address?");
+                                    },
+                                    _ => {
+                                        let _mail_result = mailer.send(email.unwrap().into());
+                                    }
                                 }
                             }
+                            
                         }
                     }
 
@@ -351,19 +374,23 @@ pub fn check_expiry_dates(
                         println!("Notifying admins...");
                         for name in item.admins.iter() {
                             let strpname = name.replace("\"", "");
-                            println!("Notifying {}", &strpname);
-                            let email = Email::builder()
-                                .to((format!("{}@{}", strpname, email_domain), strpname))
-                                .from(addr)
-                                .subject("Your project's resources have been revoked.")
-                                .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 8 weeks.", &item.name, &item.last_update))
-                                .build();
-                            match email {
-                                Err(_err) => {
-                                    println!("Could not send email. Invalid email address?");
-                                },
-                                _ => {
-                                    let _mail_result = mailer.send(email.unwrap().into());
+                            if !send_to_root && &strpname == "root" {
+                                println!("I am NOT going to email root.");
+                            } else {
+                                println!("Notifying {}", &strpname);
+                                let email = Email::builder()
+                                    .to((format!("{}@{}", strpname, email_domain), strpname))
+                                    .from(addr)
+                                    .subject("Your project's resources have been revoked.")
+                                    .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 8 weeks.", &item.name, &item.last_update))
+                                    .build();
+                                match email {
+                                    Err(_err) => {
+                                        println!("Could not send email. Invalid email address?");
+                                    },
+                                    _ => {
+                                        let _mail_result = mailer.send(email.unwrap().into());
+                                    }
                                 }
                             }
                         }
@@ -375,19 +402,23 @@ pub fn check_expiry_dates(
                         println!("Notifying admins...");
                         for name in item.admins.iter() {
                             let strpname = name.replace("\"", "");
-                            println!("Notifying {}", &strpname);
-                            let email = Email::builder()
-                                .to((format!("{}@{}", strpname, email_domain), strpname))
-                                .from(addr)
-                                .subject(format!("Old OKD project: {}", &item.name))
-                                .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
-                                .build();
-                            match email {
-                                Err(_err) => {
-                                    println!("Could not send email. Invalid email address?");
-                                },
-                                _ => {
-                                    let _mail_result = mailer.send(email.unwrap().into());
+                            if !send_to_root && &strpname == "root" {
+                                println!("I am NOT going to email root.");
+                            } else {
+                                println!("Notifying {}", &strpname);
+                                let email = Email::builder()
+                                    .to((format!("{}@{}", strpname, email_domain), strpname))
+                                    .from(addr)
+                                    .subject(format!("Old OKD project: {}", &item.name))
+                                    .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
+                                    .build();
+                                match email {
+                                    Err(_err) => {
+                                        println!("Could not send email. Invalid email address?");
+                                    },
+                                    _ => {
+                                        let _mail_result = mailer.send(email.unwrap().into());
+                                    }
                                 }
                             }
                         }
