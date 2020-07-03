@@ -39,7 +39,7 @@ fn main() -> Result<()> {
     );
 
     let matches = App::new("ShelfLife")
-        .author("Willard N. <willnilges@mail.rit.edu>")
+        .author("Will N. <willnilges@mail.rit.edu>")
         .about("Automatic spin-down and deletion management of OKD projects.")
         .setting(AppSettings::ArgRequiredElseHelp)
         .arg(Arg::with_name("all")
