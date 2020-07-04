@@ -53,10 +53,14 @@ fn main() -> Result<()> {
         .arg(Arg::with_name("cull")
             .short("c")
             .long("cull")
-            .help("Checks greylist for projects that need attention. Takes appropriate course of action."))
-        .arg(Arg::with_name("delete")
+            .help("Checks graylist for projects that need attention. Takes appropriate course of action."))
+        .arg(Arg::with_name("dryrun")
             .short("d")
-            .long("delete")
+            .long("dryrun")
+            .help("Checks graylist for projects that need attention. Takes no action."))
+        .arg(Arg::with_name("remove")
+            .short("r")
+            .long("remove")
             .value_name("NAMESPACE")
             .help("Removes a namespace from the database.")
             .takes_value(true))
@@ -95,7 +99,11 @@ fn main() -> Result<()> {
     }
  
     if matches.occurrences_of("cull") > 0 {
-        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection);
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, false);
+    }
+
+    if matches.occurrences_of("dryrun") > 0 {
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, true);
     }
 
     if let Some(deleted) = matches.value_of("delete") {
