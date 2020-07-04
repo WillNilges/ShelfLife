@@ -32,15 +32,17 @@ pub fn check_env() -> Result<()> { // TODO: Actually use results.
             Ok(okd_token) => {
                 if okd_token == "" {
                     println!("Can't find {}! This'll produce a TON of errors!", i);
-                } else {
-                    println!("Found {}.", i);
                 }
+                // TODO: Verbose mode feature.
+                //else {
+                //    println!("Found {}.", i);
+                //}
             },
             Err(e) => println!("Can't find {}! {}", i, e),
         };
     }
 
-    Ok(()) // All env variables found
+    Ok(())
 }
 
 /*                                  PROJECT FUNCTIONS  */
@@ -242,7 +244,8 @@ fn get_shelflife_info(
 pub fn check_expiry_dates(
     http_client: &reqwest::Client, 
     mongo_client: &mongodb::Client, 
-    collection: &str
+    collection: &str,
+    dryrun: bool
 ) -> Result<()>{
     let endpoint = env::var("ENDPOINT")?; 
 
@@ -291,6 +294,12 @@ pub fn check_expiry_dates(
 
     println!("Got all env variables.");
 
+    if dryrun {
+        usemail = false;
+        send_to_root = false;
+        println!("We are in DRYRUN MODE! NONE OF SHELFLIFE'S ACTIONS ARE ACTUALLY HAPPENING!");
+    }
+
     let mut mailer = SmtpClient::new_simple(&email_srv).unwrap()
         .credentials(Credentials::new(email_uname.to_string(), email_passwd.to_string()))
         .smtp_utf8(true)
@@ -308,109 +317,114 @@ pub fn check_expiry_dates(
             Ok(last_update_unwrapped) => {
                 let age = Utc::now().signed_duration_since(last_update_unwrapped);
                 let addr: &str = &*email_addr;
+                // TWENTY FOUR WEEKS!
                 if age > chrono::Duration::weeks(24) { // Check longest first, decending.
-                    println!("The last update to {} was more than 24 weeks ago. Project marked for deletion...", &item.name);
-                    println!("Exporting project...");
-                    let export_result = export_project(&item.name);
-                    match export_result {
-                        Ok(()) => {
-                            println!("Export complete.");
+                    println!("The last update to {} was more than 24 weeks ago.", &item.name);
+                    if !dryrun {
+                        println!("Project marked for deletion...");
+                        println!("Exporting project...");
+                        let export_result = export_project(&item.name);
+                        match export_result {
+                            Ok(()) => {
+                                println!("Export complete.");
+                            }
+                            _ => {
+                                println!("Export failed!");
+                                dbg!(&export_result);
+                            }
                         }
-                        _ => {
-                            println!("Export failed!");
-                            dbg!(&export_result);
-                        }
-                    }
-                    println!("Requesting API to delete...");
+                        println!("Requesting API to delete...");
 
-                    let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
-                    let _result = delete_call_api(&http_client, &delete_call);
-                    let _db_result = remove_db_item(mongo_client, collection, &item.name);
+                        let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
+                        let _result = delete_call_api(&http_client, &delete_call);
+                        let _db_result = remove_db_item(mongo_client, collection, &item.name);
 
-                    println!("Project has been marked for deletion and removed from ShelfLife DB.");
+                        println!("Project has been marked for deletion and removed from ShelfLife DB.");
 
-                    // Find the names of the admins and send them M A I L!
-                    if usemail {
-                        println!("Notifying admins...");
-                        for name in item.admins.iter() {
-                            let strpname = name.replace("\"", "");
-                            if !send_to_root && &strpname == "root" {
-                                println!("I am NOT going to email root.");
-                            } else {
-                                println!("Notifying {}", &strpname);
+                        // Find the names of the admins and send them M A I L!
+                        if usemail {
+                            println!("Notifying admins...");
+                            for name in item.admins.iter() {
                                 let strpname = name.replace("\"", "");
-                                let email = Email::builder()
-                                    .to((format!("{}@{}", strpname, email_domain), strpname))
-                                    .from(addr)
-                                    .subject("Hi, I nuked your project :)")
-                                    .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project in your homedir at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
-                                    .build();
-                                match email {
-                                    Err(_err) => {
-                                        println!("Could not send email. Invalid email address?");
-                                    },
-                                    _ => {
-                                        let _mail_result = mailer.send(email.unwrap().into());
+                                if !send_to_root && &strpname == "root" {
+                                    println!("I am NOT going to email root.");
+                                } else {
+                                    println!("Notifying {}", &strpname);
+                                    let strpname = name.replace("\"", "");
+                                    let email = Email::builder()
+                                        .to((format!("{}@{}", strpname, email_domain), strpname))
+                                        .from(addr)
+                                        .subject("Hi, I nuked your project :)")
+                                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project in your homedir at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
+                                        .build();
+                                    match email {
+                                        Err(_err) => {
+                                            println!("Could not send email. Invalid email address?");
+                                        },
+                                        _ => {
+                                            let _mail_result = mailer.send(email.unwrap().into());
+                                        }
                                     }
                                 }
                             }
-                            
                         }
                     }
 
                 }else if age > chrono::Duration::weeks(16) {
                     println!("The last update to {} was more than 16 weeks ago.", &item.name);
-                    println!("Spinning down...");
+                    if !dryrun {
+                        println!("Spinning down...");
 
-                    // Query deployment configs that will need to be spun down.
-                    let deploycfgs_call = format!(
-                        "https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs",
-                        endpoint, &item.name
-                    );
-
-                    let deploycfgs_resp = get_call_api(&http_client, &deploycfgs_call); // Make the call
-                    let deploycfgs_json: DeploymentResponse = deploycfgs_resp?.json()?;
-                    let mut deploys = Vec::new();
-                    for item in deploycfgs_json.items {
-                        if item.status.replicas > 0 {
-                            println!("Spinning down {} replicas in {}", &item.status.replicas, &item.metadata.name);
-                            deploys.push(item.metadata.name);
-                        }
-                    }
-
-                    // Tell deploymentconfigs to scale down to 0 pods.
-                    for deployment in deploys {
-                        let call = format!(
-                            "https://{}/oapi/v1/namespaces/{}/deploymentconfigs/{}/scale",
-                            endpoint, &item.name, &deployment
+                        // Query deployment configs that will need to be spun down.
+                        let deploycfgs_call = format!(
+                            "https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs",
+                            endpoint, &item.name
                         );
-                        let post = format!(
-                        "{{\"apiVersion\":\"extensions/v1beta1\",\"kind\":\"Scale\",\"metadata\":{{\"name\":\"{}\",\"namespace\":\"{}\"}},\"spec\":{{\"replicas\":0}}}}",
-                        &deployment, &item.name);
-                        let _result = put_call_api(&http_client, &call, String::from(&post))?;
-                    }
-                    
-                    if usemail {    
-                        // Find the names of the admins and send them M A I L!
-                        println!("Notifying admins...");
-                        for name in item.admins.iter() {
-                            let strpname = name.replace("\"", "");
-                            if !send_to_root && &strpname == "root" {
-                                println!("I am NOT going to email root.");
-                            } else {
-                                println!("Notifying {}", &strpname);
-                                let email = Email::builder()
-                                    .to((format!("{}@{}", strpname, email_domain), strpname))
-                                    .from(addr)
-                                    .subject("Your project's resources have been revoked.")
-                                    .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 8 weeks.", &item.name, &item.last_update))
-                                    .build();
-                                match email {
-                                    Err(_err) => {
-                                        println!("Could not send email. Invalid email address?");
-                                    },
-                                    _ => {
-                                        let _mail_result = mailer.send(email.unwrap().into());
+
+                        let deploycfgs_resp = get_call_api(&http_client, &deploycfgs_call); // Make the call
+                        let deploycfgs_json: DeploymentResponse = deploycfgs_resp?.json()?;
+                        let mut deploys = Vec::new();
+                        for item in deploycfgs_json.items {
+                            if item.status.replicas > 0 {
+                                println!("Spinning down {} replicas in {}", &item.status.replicas, &item.metadata.name);
+                                deploys.push(item.metadata.name);
+                            }
+                        }
+
+                        // Tell deploymentconfigs to scale down to 0 pods.
+                        for deployment in deploys {
+                            let call = format!(
+                                "https://{}/oapi/v1/namespaces/{}/deploymentconfigs/{}/scale",
+                                endpoint, &item.name, &deployment
+                            );
+                            let post = format!(
+                            "{{\"apiVersion\":\"extensions/v1beta1\",\"kind\":\"Scale\",\"metadata\":{{\"name\":\"{}\",\"namespace\":\"{}\"}},\"spec\":{{\"replicas\":0}}}}",
+                            &deployment, &item.name);
+                            let _result = put_call_api(&http_client, &call, String::from(&post))?;
+                        }
+                        
+                        if usemail {    
+                            // Find the names of the admins and send them M A I L!
+                            println!("Notifying admins...");
+                            for name in item.admins.iter() {
+                                let strpname = name.replace("\"", "");
+                                if !send_to_root && &strpname == "root" {
+                                    println!("I am NOT going to email root.");
+                                } else {
+                                    println!("Notifying {}", &strpname);
+                                    let email = Email::builder()
+                                        .to((format!("{}@{}", strpname, email_domain), strpname))
+                                        .from(addr)
+                                        .subject("Your project's resources have been revoked.")
+                                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 8 weeks.", &item.name, &item.last_update))
+                                        .build();
+                                    match email {
+                                        Err(_err) => {
+                                            println!("Could not send email. Invalid email address?");
+                                        },
+                                        _ => {
+                                            let _mail_result = mailer.send(email.unwrap().into());
+                                        }
                                     }
                                 }
                             }
@@ -418,27 +432,29 @@ pub fn check_expiry_dates(
                     }
                 }else  if age > chrono::Duration::weeks(12) {
                     println!("The last update to {} was more than 12 weeks ago.", &item.name);
-                    if usemail {    
-                        // Find the names of the admins and send them M A I L!
-                        println!("Notifying admins...");
-                        for name in item.admins.iter() {
-                            let strpname = name.replace("\"", "");
-                            if !send_to_root && &strpname == "root" {
-                                println!("I am NOT going to email root.");
-                            } else {
-                                println!("Notifying {}", &strpname);
-                                let email = Email::builder()
-                                    .to((format!("{}@{}", strpname, email_domain), strpname))
-                                    .from(addr)
-                                    .subject(format!("Old OKD project: {}", &item.name))
-                                    .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
-                                    .build();
-                                match email {
-                                    Err(_err) => {
-                                        println!("Could not send email. Invalid email address?");
-                                    },
-                                    _ => {
-                                        let _mail_result = mailer.send(email.unwrap().into());
+                    if !dryrun {
+                        if usemail {    
+                            // Find the names of the admins and send them M A I L!
+                            println!("Notifying admins...");
+                            for name in item.admins.iter() {
+                                let strpname = name.replace("\"", "");
+                                if !send_to_root && &strpname == "root" {
+                                    println!("I am NOT going to email root.");
+                                } else {
+                                    println!("Notifying {}", &strpname);
+                                    let email = Email::builder()
+                                        .to((format!("{}@{}", strpname, email_domain), strpname))
+                                        .from(addr)
+                                        .subject(format!("Old OKD project: {}", &item.name))
+                                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
+                                        .build();
+                                    match email {
+                                        Err(_err) => {
+                                            println!("Could not send email. Invalid email address?");
+                                        },
+                                        _ => {
+                                            let _mail_result = mailer.send(email.unwrap().into());
+                                        }
                                     }
                                 }
                             }
