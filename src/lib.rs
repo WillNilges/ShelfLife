@@ -25,7 +25,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 // Let's make sure those environment variables are set, yea?
 pub fn check_env() -> Result<()> { // TODO: Actually use results.
-    let variables = vec!("OKD TOKEN", "DB_ADDR", "DB_PORT", "SEND_MAIL", "MAIL_ROOT", "EMAIL_SRV","EMAIL_UNAME", "EMAIL_PASSWD", "EMAIL_ADDRESS", "EMAIL_DOMAIN"); 
+    let variables = vec!("OKD_TOKEN", "DB_ADDR", "DB_PORT", "SEND_MAIL", "MAIL_ROOT", "EMAIL_SRV","EMAIL_UNAME", "EMAIL_PASSWD", "EMAIL_ADDRESS", "EMAIL_DOMAIN"); 
 
     for i in variables {
         match env::var(i) {
