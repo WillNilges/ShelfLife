@@ -19,8 +19,29 @@ use lettre::smtp::ConnectionReuseParameters;
 use lettre_email::Email;
 use std::process::Command;
 use std::env;
+// TODO: use std::env::VarError;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+// Let's make sure those environment variables are set, yea?
+pub fn check_env() -> Result<()> { // TODO: Actually use results.
+    let variables = vec!("OKD_TOKEN", "DB_ADDR", "DB_PORT", "SEND_MAIL", "MAIL_ROOT", "EMAIL_SRV","EMAIL_UNAME", "EMAIL_PASSWD", "EMAIL_ADDRESS", "EMAIL_DOMAIN"); 
+
+    for i in variables {
+        match env::var(i) {
+            Ok(okd_token) => {
+                if okd_token == "" {
+                    println!("Can't find {}! This'll produce a TON of errors!", i);
+                } else {
+                    println!("Found {}.", i);
+                }
+            },
+            Err(e) => println!("Can't find {}! {}", i, e),
+        };
+    }
+
+    Ok(()) // All env variables found
+}
 
 /*                                  PROJECT FUNCTIONS  */
 /* --------------------------------------------------  */
