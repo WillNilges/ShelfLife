@@ -8,6 +8,7 @@ use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
 use shelflife::{
+                check_env,
                 query_known_namespace,
                 check_expiry_dates,
                 get_call_api,
@@ -18,7 +19,10 @@ use shelflife::{
             };
 
 fn main() -> Result<()> {
-    dotenv().ok();
+    //TODO: Investigate if this is the best way to go about
+    // figuring out if env variables exist.
+    dotenv().ok(); //dotenv's error messages suck.
+    check_env(); // So let's make our own!
     let endpoint = env::var("ENDPOINT")?;
     
     let http_client = reqwest::Client::new();
