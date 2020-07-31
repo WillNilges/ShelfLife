@@ -106,7 +106,7 @@ fn main() -> Result<()> {
         let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, true); // This is NOT destructive
     }
 
-    if let Some(deleted) = matches.value_of("delete") {
+    if let Some(deleted) = matches.value_of("remove") {
         remove_db_item(&mongo_client, collection, deleted)?;
     }
     

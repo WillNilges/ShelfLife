@@ -8,7 +8,8 @@ extern crate lettre_email;
 extern crate dotenv;
 
 use mongodb::db::ThreadedDatabase;
-use mongodb::{bson, doc, Bson, ThreadedClient};
+use mongodb::ordered::OrderedDocument;
+use mongodb::{bson, doc, Bson, ThreadedClient, Document};
 use prettytable::Table;
 use protocol::*;
 use reqwest::StatusCode;
@@ -78,8 +79,29 @@ pub fn query_known_namespace(
     namespace: &str,
     autoadd: bool,
 ) -> Result<()> {
+    // Check the MongoDB to see if we have anything by that name.
+    let current_item = match mongo_client
+                             .db("SHELFLIFE")
+                             .collection(collection)
+                             .find_one(Some(doc!{"name": namespace}), None) {
+        Ok(Some(db_result)) => {
+            println!("Found an item in mongodb!");
+            dbg!(db_result.get_str("discovery_date"));
+            Some(db_result)
+        },
+        Ok(None) => {
+            println!("Could not find the item.");
+            None
+        },
+        Err(e) => {
+            eprintln!("{}", e);
+            panic!("Cannot connect to DB!"); // TODO: Consider if we want to panic here.
+        }
+    };
+
+    // Get all the data we need from the OpenShift API.
     print!("{}",format!("\nQuerying API for namespace {}...", namespace).to_string());
-    let namespace_info = get_shelflife_info(http_client, namespace,)?;
+    let mut namespace_info = get_shelflife_info(http_client, namespace,)?;
     print!(" API Response: ");
     println!("{} {:?} {} {}", namespace_info.name, namespace_info.admins, namespace_info.last_update, namespace_info.cause);
 
@@ -119,9 +141,15 @@ pub fn query_known_namespace(
                     dbg!(&input.trim());
                 }
             }
-        } else {println!("Adding...")}
-        
+        } else {
+            println!("Adding...")
+        }
+
         if autoadd || add {
+            // Get the current time.
+            let now = Utc::now();
+            let nowrfc = now.to_rfc2822();
+            namespace_info.discovery_date = nowrfc;
              match collection.as_ref() {
                 "graylist" => {
                     println!("Graylisting {}\n", queried_namespace);
@@ -141,6 +169,13 @@ pub fn query_known_namespace(
         }
     } else {
         println!("The requested namespace is in the database. Updating entry...");
+        // Preserve the discovery date.
+        let discovery_date = match current_item {
+            Some(item) => item.get_str("discovery_date").unwrap().to_string(),
+            None => panic!("How did you get here?"),
+        };
+        namespace_info.discovery_date = discovery_date; //TODO: I think there's an error to catch here.
+        //TODO: Update db entry instead of adding and removing it.
         let _db_result = remove_db_item(mongo_client, collection, &queried_namespace);
         let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
         println!("Entry updated.");
@@ -235,6 +270,7 @@ fn get_shelflife_info(
     let api_response = DBItem {
         name: namespace.to_string(),
         admins: rolebindings,
+        discovery_date: "MISSING!".to_string(), //TODO
         last_update: latest_update.to_rfc2822(),
         cause: cause.to_string(), 
     };
@@ -574,6 +610,7 @@ fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem
         if let Ok(item) = result {
             let mut doc_name = String::new();
             let mut doc_admins: Vec<String> = Vec::new();
+            let mut doc_discovery_date = String::new();
             let mut doc_last_deployment = String::new();
             let mut doc_cause = String::new();
             if let Some(&Bson::String(ref name)) = item.get("name") {
@@ -585,6 +622,9 @@ fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem
                     doc_admins.push(item.to_string());
                 }
             }
+            if let Some(&Bson::String(ref discovery_date)) = item.get("discovery_date") {
+                doc_discovery_date = discovery_date.to_string();
+            }
             if let Some(&Bson::String(ref last_deployment)) = item.get("last_update") {
                 doc_last_deployment = last_deployment.to_string();
             }
@@ -594,6 +634,7 @@ fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem
             let namespace_document = DBItem {
                 name: doc_name.as_str().to_string(),
                 admins: doc_admins,
+                discovery_date: doc_discovery_date,
                 last_update: doc_last_deployment,
                 cause: doc_cause.to_string(),
             };
@@ -618,11 +659,12 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
         }
     }
     let mut db_table = Table::new(); // Create the table
-    db_table.add_row(row!["Namespace", "Admins", "Latest Update", "Cause"]); // Add a row per time
+    db_table.add_row(row!["Namespace", "Admins", "Discovery Date", "Last Update", "Cause"]); // Add a row per time
     for row in &current_table {
         db_table.add_row(row![
             row.name,
             format!("{:?}", row.admins),
+            row.discovery_date,
             row.last_update,
             row.cause,
         ]);
@@ -632,21 +674,24 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
 }
 
 fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem) -> Result<()> {
-    // Direct connection to a server. Will not look for other servers in the topology.
     dbg!(&item.last_update);
     let coll = mongo_client
         .db("SHELFLIFE")
         .collection(&collection);
-    coll.insert_one(doc!{"name": item.name, "admins": bson::to_bson(&item.admins)?, "last_update": item.last_update, "cause": item.cause}, None).unwrap();
+    coll.insert_one(doc!{"name": item.name,
+                         "admins": bson::to_bson(&item.admins)?,
+                         "discovery_date": item.discovery_date, 
+                         "last_update": item.last_update, 
+                         "cause": item.cause}, None)
+                         .unwrap();
     Ok(())
 }
 
 pub fn remove_db_item(mongo_client: &mongodb::Client, collection: &str, namespace: &str) -> Result<()> {
-    // Direct connection to a server. Will not look for other servers in the topology.
     let coll = mongo_client
         .db("SHELFLIFE")
         .collection(collection);
-    coll.find_one_and_delete(doc! {"name": namespace}, None)
+    coll.find_one_and_delete(doc!{"name": namespace}, None)
         .unwrap();
     println!("{} has been removed from db.", namespace);
     Ok(())
