@@ -99,14 +99,14 @@ fn main() -> Result<()> {
     }
  
     if matches.occurrences_of("cull") > 0 {
-        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, false);
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, false); // 'False' as in DRYRUN IS DISABLED THIS IS ACTUALLY DESTRUCTIVE!
     }
 
     if matches.occurrences_of("dryrun") > 0 {
-        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, true);
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, true); // This is NOT destructive
     }
 
-    if let Some(deleted) = matches.value_of("delete") {
+    if let Some(deleted) = matches.value_of("remove") {
         remove_db_item(&mongo_client, collection, deleted)?;
     }
     

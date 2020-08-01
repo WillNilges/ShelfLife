@@ -125,6 +125,7 @@ pub struct RolebindingsResponse {
 pub struct DBItem {
     pub name: String,
     pub admins: Vec<String>,
+    pub discovery_date: String,
     pub last_update: String,
     pub cause: String,
 }
