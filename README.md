@@ -30,6 +30,17 @@ It will also have an interactive mode for setup, configuration, and monitoring.
 - `libssl-dev`
 - `pkg-config`
 
+## Usage
+
+To use this app, you'll need a few things:
+
+* An Openshift cluster that can be accessed via API calls
+* An admin™ account for ShelfLife to view and manage namespaces
+* MongoDB installed and running (https://docs.mongodb.com/manual/tutorial/install-mongodb-on-ubuntu/)
+* A .env file to store Openshift cluster information, DB information, and a few
+  other miscellaneous things. Get started by copying the provided `.env.sample`
+  file to `.env` and then fill in the appropriate values.
+
 ## Setup
 
 - Clone the repo and run the install script.
@@ -49,17 +60,6 @@ oc get token shelflife-dev-bot # Spits out the API token.
 - Copy the API token, cluster URL, and email credentials into the .env file.
 - Configure the .env file with your email information.
 - Go to town.
-
-## Usage
-
-To use this app, you'll need a few things:
-
-* An Openshift cluster that can be accessed via API calls
-* An admin™ account for ShelfLife to view and manage namespaces
-* MongoDB installed and running (https://docs.mongodb.com/manual/tutorial/install-mongodb-on-ubuntu/)
-* A .env file to store Openshift cluster information, DB information, and a few
-  other miscellaneous things. Get started by copying the provided `.env.sample`
-  file to `.env` and then fill in the appropriate values.
 
 ## CLI Arguments
 ```
