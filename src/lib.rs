@@ -49,7 +49,7 @@ pub fn check_env() { // TODO: Actually use results.
 /*                                  PROJECT FUNCTIONS  */
 /* --------------------------------------------------  */
 
-pub fn get_project_names(http_client: &reqwest::Client) -> Result<Vec<String>> {
+pub fn get_namespaces(http_client: &reqwest::Client) -> Result<Vec<String>> {
     let endpoint = env::var("ENDPOINT")?; 
     let projects_call = format!("https://{}/apis/project.openshift.io/v1/projects", endpoint); 
     let projects_resp = get_call_api(&http_client, &projects_call);
@@ -99,9 +99,6 @@ pub fn query_known_namespace(
     // Get all the data we need from the OpenShift API.
     println!("{}",format!("Querying API for namespace {}...", namespace).to_string());
     let mut namespace_info = get_shelflife_info(http_client, namespace,)?;
-    // DEBUG
-    // println!(" API Response: ");
-    // println!("{} {:?} {} {}", namespace_info.name, namespace_info.admins, namespace_info.last_update, namespace_info.cause);
 
     // Query the DB and get back a table of already added namespaces
     let current_table: Vec<DBItem> = get_db(mongo_client, &collection)?;
@@ -191,11 +188,10 @@ fn get_shelflife_info(
     let endpoint = env::var("ENDPOINT")?; 
 
     // Query for creation date. This is guaranteed to exist.
-    let project_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, namespace); // Formulate the call
-    let project_resp = get_call_api(&http_client, &project_call); // Make the call
-    //dbg!(&project_resp);
-    let project_json: ProjectItem = project_resp?.json()?;
-    let mut latest_update = DateTime::parse_from_rfc3339(&project_json.metadata.creation_timestamp)?;
+    let namespace_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, namespace); // Formulate the call
+    let namespace_resp = get_call_api(&http_client, &namespace_call); // Make the call
+    let namespace_json: ProjectItem = namespace_resp?.json()?;
+    let mut latest_update = DateTime::parse_from_rfc3339(&namespace_json.metadata.creation_timestamp)?;
     let mut cause = "Creation";
 
     // Query for builds

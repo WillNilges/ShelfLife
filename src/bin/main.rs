@@ -12,7 +12,7 @@ use shelflife::{
                 query_known_namespace,
                 check_expiry_dates,
                 get_call_api,
-                get_project_names,
+                get_namespaces,
                 remove_db_item,
                 view_db,
                 Result
@@ -92,7 +92,7 @@ fn main() -> Result<()> {
     }
 
     if matches.occurrences_of("all") > 0 {
-        let proj_names = get_project_names(&http_client);
+        let proj_names = get_namespaces(&http_client);
         for project in proj_names.unwrap() {
             query_known_namespace(&mongo_client, collection, &http_client, &project, true)?;
         }
