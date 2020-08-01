@@ -21,8 +21,8 @@ use shelflife::{
 fn main() -> Result<()> {
     //TODO: Investigate if this is the best way to go about
     // figuring out if env variables exist.
-    dotenv().ok(); //dotenv's error messages suck.
-    check_env(); // So let's make our own!
+    dotenv().ok();
+    check_env();
     let endpoint = env::var("ENDPOINT")?;
     
     let http_client = reqwest::Client::new();
@@ -99,6 +99,7 @@ fn main() -> Result<()> {
     }
  
     if matches.occurrences_of("cull") > 0 {
+        println!("You might want to run the -a option if you haven't already.");
         let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, false); // 'False' as in DRYRUN IS DISABLED THIS IS ACTUALLY DESTRUCTIVE!
     }
 
