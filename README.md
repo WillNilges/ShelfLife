@@ -30,7 +30,7 @@ It will also have an interactive mode for setup, configuration, and monitoring.
 - `libssl-dev`
 - `pkg-config`
 
-## Usage
+## Setup
 
 To use this app, you'll need a few things:
 
@@ -41,7 +41,7 @@ To use this app, you'll need a few things:
   other miscellaneous things. Get started by copying the provided `.env.sample`
   file to `.env` and then fill in the appropriate values.
 
-## Setup
+### Installation
 
 - Clone the repo and run the install script.
 ```
@@ -68,7 +68,8 @@ USAGE:
 
 FLAGS:
     -a, --all          Queries all available namespaces and adds/updates any that are missing/outdated to the database.
-    -c, --cull         Checks greylist for projects that need attention. Takes appropriate course of action.
+    -c, --cull         Checks graylist for projects that need attention. Takes appropriate course of action.
+    -d, --dryrun       Checks graylist for projects that need attention. Takes no action.
     -h, --help         Prints help information
     -l, --list         Print namespaces currently tracked in the database.
     -V, --version      Prints version information
@@ -76,13 +77,9 @@ FLAGS:
                        greylist.
 
 OPTIONS:
-    -d, --delete <NAMESPACE>     Removes a namespace from the database.
     -k, --known <NAMESPACE>      Query API and ShelfLife Database for a known namespace. If it is missing from the
-                                 database, the user is is asked if they want to add it.
+                                 database, the user is asked if they want to add it.
     -p, --project <NAMESPACE>    Query API for project info about a namespace.
+    -r, --remove <NAMESPACE>     Removes a namespace from the database.
 ```
 
-## Build and Run in Docker
-```
-docker build -t shelflife . && docker run --rm -it shelflife
-```
