@@ -667,13 +667,44 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
         }
     }
     let mut db_table = Table::new(); // Create the table
-    db_table.add_row(row!["Namespace", "Admins", "Discovery Date", "Last Update", "Cause"]); // Add a row per time
+    db_table.add_row(row!["Namespace", "Admins", "Discovery Date", "Last Update", "Weeks Spent", "Cause"]); // Add a row per time
     for row in &current_table {
+
+
+        // This should be safe. Compare discovery date with last update to see
+        // which is more recent. Copied and pasted from check_expiry_dates().
+        let last_update = DateTime::parse_from_rfc2822(&row.last_update).unwrap();
+        let age = match DateTime::parse_from_rfc2822(&row.discovery_date) {
+            Ok(date) => {
+                let discovery_date = date;
+                let since = match last_update.signed_duration_since(discovery_date) {
+                    d if d > Duration::nanoseconds(0) => Utc::now().signed_duration_since(last_update),
+                    _ => Utc::now().signed_duration_since(discovery_date),
+                };
+                since
+            },
+            _ => {
+                Utc::now().signed_duration_since(last_update)
+            }
+        };
+
+        // This panics sometimes
+        // let discovery = DateTime::parse_from_rfc2822(&row.discovery_date).unwrap();
+        // let manual = DateTime::parse_from_rfc2822(&row.last_update).unwrap();
+
+        // let since = match manual.signed_duration_since(discovery) {
+        //     d if d > Duration::nanoseconds(0) => Utc::now().signed_duration_since(manual),
+        //     _ => Utc::now().signed_duration_since(discovery),
+        // };
+
+        let weeks_since = Duration::num_weeks(&age);
+
         db_table.add_row(row![
             row.name,
             format!("{:?}", row.admins),
             row.discovery_date,
             row.last_update,
+            weeks_since,
             row.cause,
         ]);
     }
