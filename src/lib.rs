@@ -19,30 +19,31 @@ use lettre::smtp::ConnectionReuseParameters;
 use lettre_email::Email;
 use std::process::Command;
 use std::env;
-// TODO: use std::env::VarError;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 // Let's make sure those environment variables are set, yea?
-pub fn check_env() -> Result<()> { // TODO: Actually use results.
+pub fn check_env() { // TODO: Actually use results.
     let variables = vec!("OKD_TOKEN", "DB_ADDR", "DB_PORT", "SEND_MAIL", "MAIL_ROOT", "EMAIL_SRV","EMAIL_UNAME", "EMAIL_PASSWD", "EMAIL_ADDRESS", "EMAIL_DOMAIN"); 
 
     for i in variables {
         match env::var(i) {
-            Ok(okd_token) => {
-                if okd_token == "" {
+            Ok(environment_var) => {
+                if environment_var == "" {
                     println!("Can't find {}! This'll produce a TON of errors!", i);
+                    panic!("Refusing to continue without all vars.");
                 }
                 // TODO: Verbose mode feature.
                 //else {
                 //    println!("Found {}.", i);
                 //}
             },
-            Err(e) => println!("Can't find {}! {}", i, e),
+            Err(e) => {
+                eprintln!("Can't find {}! {}", i, e);
+                panic!("Refusing to continue without all vars.");
+            },
         };
     }
-
-    Ok(())
 }
 
 /*                                  PROJECT FUNCTIONS  */
@@ -52,22 +53,20 @@ pub fn get_project_names(http_client: &reqwest::Client) -> Result<Vec<String>> {
     let endpoint = env::var("ENDPOINT")?; 
     let projects_call = format!("https://{}/apis/project.openshift.io/v1/projects", endpoint); 
     let projects_resp = get_call_api(&http_client, &projects_call);
-    let _projects_resp_unwrapped = Some(&projects_resp);
-    let mut projects = Vec::new();
+
     match projects_resp {
-        Ok(mut projects_resp_unwrapped) => {
-            let projects_json: ProjectResponse = projects_resp_unwrapped.json()?;
+        Ok(mut call_reply) => {
+            let mut projects = Vec::new();
+            let projects_json: ProjectResponse = call_reply.json()?;
             
             for item in projects_json.items {
                 projects.push(item.metadata.name);
             }
             dbg!(&projects);
+            return Ok(projects)
         },
-        Err(_) => {
-            dbg!(&projects_resp);
-        },
+        Err(e) => return Err(e)
     }
-    Ok(projects)
 }
 
 //Queries API for a project namespace name 
@@ -84,11 +83,11 @@ pub fn query_known_namespace(
                              .collection(collection)
                              .find_one(Some(doc!{"name": namespace}), None) {
         Ok(Some(db_result)) => {
-            println!("Found an item already in the DB!");
+            println!("{} already discovered.", namespace);
             Some(db_result)
         },
         Ok(None) => {
-            println!("Could not find the item.");
+            println!("{} not yet discovered.", namespace);
             None
         },
         Err(e) => {
@@ -98,10 +97,11 @@ pub fn query_known_namespace(
     };
 
     // Get all the data we need from the OpenShift API.
-    print!("{}",format!("\nQuerying API for namespace {}...", namespace).to_string());
+    println!("{}",format!("Querying API for namespace {}...", namespace).to_string());
     let mut namespace_info = get_shelflife_info(http_client, namespace,)?;
-    print!(" API Response: ");
-    println!("{} {:?} {} {}", namespace_info.name, namespace_info.admins, namespace_info.last_update, namespace_info.cause);
+    // DEBUG
+    // println!(" API Response: ");
+    // println!("{} {:?} {} {}", namespace_info.name, namespace_info.admins, namespace_info.last_update, namespace_info.cause);
 
     // Query the DB and get back a table of already added namespaces
     let current_table: Vec<DBItem> = get_db(mongo_client, &collection)?;
@@ -112,17 +112,19 @@ pub fn query_known_namespace(
         let mut add = false;
         println!("This namespace ({}) is not in the database. ", queried_namespace);
         let whitelist: Vec<DBItem> = get_db(mongo_client, "whitelist")?;
-        if whitelist.iter().any(|x| x.name.to_string() == queried_namespace) && collection == "graylist".to_string() {
-            println!("However, it's whitelisted. Skipping...");
-            return Ok(());
-        }
-        if namespace_info.admins.len() == 0 {
-            println!("However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...");
-            return Ok(());
-        }
-        if namespace_info.name == "management-infra" {
-            println!("This looks like something important. Skipping...");
-            return Ok(());
+        if collection == "graylist" {
+            if whitelist.iter().any(|x| x.name.to_string() == queried_namespace) {
+                println!("However, it's whitelisted. Skipping...");
+                return Ok(());
+            }
+            if namespace_info.admins.len() == 0 {
+                println!("However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...");
+                return Ok(());
+            }
+            if namespace_info.name == "management-infra" || namespace_info.name == "default" {
+                println!("This looks like something important. Skipping...");
+                return Ok(());
+            }
         }
         if !autoadd {
             println!("Would you like to add it? (y/n): ");
@@ -289,48 +291,57 @@ pub fn check_expiry_dates(
     let email_addr = env::var("EMAIL_ADDRESS")?;
     let email_domain = env::var("EMAIL_DOMAIN")?;
 
-    // See if we should email anyone about what we're doing. This is mostly for development purposes. Please tell your clients when you delete their shit.
-    let send_mail = env::var("SEND_MAIL")?;
-    let mut usemail = false;
+    // See if we should email anyone about what we're doing.
+    // This is mostly for development purposes.
+    // Please tell your users when you delete their shit.
 
-    match send_mail.as_str() {
+    let usemail = match env::var("SEND_MAIL")?.as_str() {
         "true" => {
-            println!("Configured to send mail.");
-            usemail = true;
+            match dryrun {
+                true => false,
+                false => {
+                    println!("Configured to send mail.");
+                    true
+                }
+            }
         },
         "false" => {
             println!("Configured to NOT send mail. THIS IS REALLY DANGEROUS!");
-            //usemail = false;
+            false
         },
         _ => {
             println!("Can't find sendmail. Assuming I should NOT send mail!");
             println!("THIS IS REALLY DANGEROUS!");
-            //usemail = false;
+            false
         },
-    }
+    };
 
     // See if we should email root.
-    let mail_root = env::var("MAIL_ROOT")?;
-    let mut send_to_root = false;
-
-    match mail_root.as_str() {
+    let send_to_root = match env::var("MAIL_ROOT")?.as_str() {
         "true" => {
-            println!("Configured to send mail to root.");
-            send_to_root = true;
+            match dryrun {
+                true => false,
+                false => {
+                    println!("Configured to send mail to root.");
+                    true
+                }
+            }
         },
         "false" => {
             println!("Configured to NOT send mail to root.");
+            false
         },
         _ => {
             println!("Can't find mail_root. Assuming I should NOT send mail to root!");
+            false
         },
-    } 
+    };
 
     println!("Got all env variables.");
 
     if dryrun {
-        usemail = false;
-        send_to_root = false;
+        // usemail = false;
+        // send_to_root = false;
         println!("We are in DRYRUN MODE! NONE OF SHELFLIFE'S ACTIONS ARE ACTUALLY HAPPENING!");
     }
 
@@ -360,156 +371,154 @@ pub fn check_expiry_dates(
         
         print!("Checking status of {}...", &item.name);
 
-                let addr: &str = &*email_addr;
-                // TWENTY FOUR WEEKS!
-                if age > chrono::Duration::weeks(24) { // Check longest first, decending.
-                    println!("The last update to {} was more than 24 weeks ago.", &item.name);
-                    if !dryrun {
-                        println!("Project marked for deletion...");
-                        println!("Exporting project...");
-                        let export_result = export_project(&item.name);
-                        match export_result {
-                            Ok(()) => {
-                                println!("Export complete.");
-                            }
-                            _ => {
-                                println!("Export failed!");
-                                dbg!(&export_result);
-                            }
-                        }
-                        println!("Requesting API to delete...");
-
-                        let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
-                        let _result = delete_call_api(&http_client, &delete_call);
-                        let _db_result = remove_db_item(mongo_client, collection, &item.name);
-
-                        println!("Project has been marked for deletion and removed from ShelfLife DB.");
-
-                        // Find the names of the admins and send them M A I L!
-                        if usemail {
-                            println!("Notifying admins...");
-                            for name in item.admins.iter() {
-                                let strpname = name.replace("\"", "");
-                                if !send_to_root && &strpname == "root" {
-                                    println!("I am NOT going to email root.");
-                                } else {
-                                    println!("Notifying {}", &strpname);
-                                    let strpname = name.replace("\"", "");
-                                    let email = Email::builder()
-                                        .to((format!("{}@{}", strpname, email_domain), strpname))
-                                        .from(addr)
-                                        .subject("Hi, I nuked your project :)")
-                                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project in your homedir at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
-                                        .build();
-                                    match email {
-                                        Err(_err) => {
-                                            println!("Could not send email. Invalid email address?");
-                                        },
-                                        _ => {
-                                            let _mail_result = mailer.send(email.unwrap().into());
-                                        }
-                                    }
-                                }
-                            }
-                        }
+        let addr: &str = &*email_addr;
+        // TWENTY FOUR WEEKS!
+        if age > chrono::Duration::weeks(24) { // Check longest first, decending.
+            println!("The last update to {} was more than 24 weeks ago.", &item.name);
+            if !dryrun {
+                println!("Project marked for deletion...");
+                println!("Exporting project...");
+                let export_result = export_project(&item.name);
+                match export_result {
+                    Ok(()) => {
+                        println!("Export complete.");
                     }
-
-                }else if age > chrono::Duration::weeks(16) {
-                    println!("The last update to {} was more than 16 weeks ago.", &item.name);
-                    if !dryrun {
-                        println!("Spinning down...");
-
-                        // Query deployment configs that will need to be spun down.
-                        let deploycfgs_call = format!(
-                            "https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs",
-                            endpoint, &item.name
-                        );
-
-                        let deploycfgs_resp = get_call_api(&http_client, &deploycfgs_call); // Make the call
-                        let deploycfgs_json: DeploymentResponse = deploycfgs_resp?.json()?;
-                        let mut deploys = Vec::new();
-                        for item in deploycfgs_json.items {
-                            if item.status.replicas > 0 {
-                                println!("Spinning down {} replicas in {}", &item.status.replicas, &item.metadata.name);
-                                deploys.push(item.metadata.name);
-                            }
-                        }
-
-                        // Tell deploymentconfigs to scale down to 0 pods.
-                        for deployment in deploys {
-                            let call = format!(
-                                "https://{}/oapi/v1/namespaces/{}/deploymentconfigs/{}/scale",
-                                endpoint, &item.name, &deployment
-                            );
-                            let post = format!(
-                            "{{\"apiVersion\":\"extensions/v1beta1\",\"kind\":\"Scale\",\"metadata\":{{\"name\":\"{}\",\"namespace\":\"{}\"}},\"spec\":{{\"replicas\":0}}}}",
-                            &deployment, &item.name);
-                            let _result = put_call_api(&http_client, &call, String::from(&post))?;
-                        }
-                        
-                        if usemail {    
-                            // Find the names of the admins and send them M A I L!
-                            println!("Notifying admins...");
-                            for name in item.admins.iter() {
-                                let strpname = name.replace("\"", "");
-                                if !send_to_root && &strpname == "root" {
-                                    println!("I am NOT going to email root.");
-                                } else {
-                                    println!("Notifying {}", &strpname);
-                                    let email = Email::builder()
-                                        .to((format!("{}@{}", strpname, email_domain), strpname))
-                                        .from(addr)
-                                        .subject("Your project's resources have been revoked.")
-                                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 8 weeks.", &item.name, &item.last_update))
-                                        .build();
-                                    match email {
-                                        Err(_err) => {
-                                            println!("Could not send email. Invalid email address?");
-                                        },
-                                        _ => {
-                                            let _mail_result = mailer.send(email.unwrap().into());
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    _ => {
+                        println!("Export failed!");
+                        dbg!(&export_result);
                     }
-                }else  if age > chrono::Duration::weeks(12) {
-                    println!("The last update to {} was more than 12 weeks ago.", &item.name);
-                    if !dryrun {
-                        if usemail {    
-                            // Find the names of the admins and send them M A I L!
-                            println!("Notifying admins...");
-                            for name in item.admins.iter() {
-                                let strpname = name.replace("\"", "");
-                                if !send_to_root && &strpname == "root" {
-                                    println!("I am NOT going to email root.");
-                                } else {
-                                    println!("Notifying {}", &strpname);
-                                    let email = Email::builder()
-                                        .to((format!("{}@{}", strpname, email_domain), strpname))
-                                        .from(addr)
-                                        .subject(format!("Old OKD project: {}", &item.name))
-                                        .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
-                                        .build();
-                                    match email {
-                                        Err(_err) => {
-                                            println!("Could not send email. Invalid email address?");
-                                        },
-                                        _ => {
-                                            let _mail_result = mailer.send(email.unwrap().into());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    println!(" ok.");
                 }
-            // }
-            // Err(_) => {}
-        // }
+                println!("Requesting API to delete...");
+
+                let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
+                let _result = delete_call_api(&http_client, &delete_call);
+                let _db_result = remove_db_item(mongo_client, collection, &item.name);
+
+                println!("Project has been marked for deletion and removed from ShelfLife DB.");
+
+                // Find the names of the admins and send them M A I L!
+                if usemail {
+                    println!("Notifying admins...");
+                    for name in item.admins.iter() {
+                        let strpname = name.replace("\"", "");
+                        if !send_to_root && &strpname == "root" {
+                            println!("I am NOT going to email root.");
+                        } else {
+                            println!("Notifying {}", &strpname);
+                            let strpname = name.replace("\"", "");
+                            let email = Email::builder()
+                                .to((format!("{}@{}", strpname, email_domain), strpname))
+                                .from(addr)
+                                .subject("Hi, I nuked your project :)")
+                                .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 24 weeks without an update ({}). It has been deleted from OKD. You can find a backup of the project in your homedir at <link>. Thank you for using ShelfLife, try not to let your pods get too moldy next time.", &item.name, &item.last_update))
+                                .build();
+                            match email {
+                                Err(e) => {
+                                    println!("Could not send email. Invalid email address?");
+                                    eprintln!("{}", e);
+                                },
+                                _ => {
+                                    let _mail_result = mailer.send(email.unwrap().into());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        }else if age > chrono::Duration::weeks(16) {
+            println!("The last update to {} was more than 16 weeks ago.", &item.name);
+            if !dryrun {
+                println!("Spinning down...");
+
+                // Query deployment configs that will need to be spun down.
+                let deploycfgs_call = format!(
+                    "https://{}/apis/apps.openshift.io/v1/namespaces/{}/deploymentconfigs",
+                    endpoint, &item.name
+                );
+
+                let deploycfgs_resp = get_call_api(&http_client, &deploycfgs_call); // Make the call
+                let deploycfgs_json: DeploymentResponse = deploycfgs_resp?.json()?;
+                let mut deploys = Vec::new();
+                for item in deploycfgs_json.items {
+                    if item.status.replicas > 0 {
+                        println!("Spinning down {} replicas in {}", &item.status.replicas, &item.metadata.name);
+                        deploys.push(item.metadata.name);
+                    }
+                }
+
+                // Tell deploymentconfigs to scale down to 0 pods.
+                for deployment in deploys {
+                    let call = format!(
+                        "https://{}/oapi/v1/namespaces/{}/deploymentconfigs/{}/scale",
+                        endpoint, &item.name, &deployment
+                    );
+                    let post = format!(
+                    "{{\"apiVersion\":\"extensions/v1beta1\",\"kind\":\"Scale\",\"metadata\":{{\"name\":\"{}\",\"namespace\":\"{}\"}},\"spec\":{{\"replicas\":0}}}}",
+                    &deployment, &item.name);
+                    let _result = put_call_api(&http_client, &call, String::from(&post))?;
+                }
+                
+                if usemail {  
+                    // Find the names of the admins and send them M A I L!
+                    println!("Notifying admins...");
+                    for name in item.admins.iter() {
+                        let strpname = name.replace("\"", "");
+                        if !send_to_root && &strpname == "root" {
+                            println!("I am NOT going to email root.");
+                        } else {
+                            println!("Notifying {}", &strpname);
+                            let email = Email::builder()
+                                .to((format!("{}@{}", strpname, email_domain), strpname))
+                                .from(addr)
+                                .subject("Your project's resources have been revoked.")
+                                .text(format!("Hello! You are receiving this message because your OKD project, {}, has now gone more than 16 weeks without an update ({}). All applications on the project have now been reduced to 0 pods. If you would like to revive it, do so, and its ShelfLife will reset. Otherwise, it will be deleted in another 8 weeks.", &item.name, &item.last_update))
+                                .build();
+                            match email {
+                                Err(e) => {
+                                    println!("Could not send email. Invalid email address?");
+                                    eprintln!("{}", e);
+                                },
+                                _ => {
+                                    let _mail_result = mailer.send(email.unwrap().into());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }else if age > chrono::Duration::weeks(12) {
+            println!("The last update to {} was more than 12 weeks ago.", &item.name);
+            if !dryrun && usemail {
+                // Find the names of the admins and send them M A I L!
+                println!("Notifying admins...");
+                for name in item.admins.iter() {
+                    let strpname = name.replace("\"", "");
+                    if !send_to_root && &strpname == "root" {
+                        println!("I am NOT going to email root.");
+                    } else {
+                        println!("Notifying {}", &strpname);
+                        let email = Email::builder()
+                            .to((format!("{}@{}", strpname, email_domain), strpname))
+                            .from(addr)
+                            .subject(format!("Old OKD project: {}", &item.name))
+                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
+                            .build();
+                        match email {
+                            Err(e) => {
+                                println!("Could not send email. Invalid email address?");
+                                eprintln!("{}", e);
+                            },
+                            _ => {
+                                let _mail_result = mailer.send(email.unwrap().into());
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            println!(" ok.");
+        }
     }
     mailer.close(); 
     Ok(())
@@ -669,8 +678,6 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
     let mut db_table = Table::new(); // Create the table
     db_table.add_row(row!["Namespace", "Admins", "Discovery Date", "Last Update", "Weeks Spent", "Cause"]); // Add a row per time
     for row in &current_table {
-
-
         // This should be safe. Compare discovery date with last update to see
         // which is more recent. Copied and pasted from check_expiry_dates().
         let last_update = DateTime::parse_from_rfc2822(&row.last_update).unwrap();
@@ -688,22 +695,24 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
             }
         };
 
-        // This panics sometimes
-        // let discovery = DateTime::parse_from_rfc2822(&row.discovery_date).unwrap();
-        // let manual = DateTime::parse_from_rfc2822(&row.last_update).unwrap();
-
-        // let since = match manual.signed_duration_since(discovery) {
-        //     d if d > Duration::nanoseconds(0) => Utc::now().signed_duration_since(manual),
-        //     _ => Utc::now().signed_duration_since(discovery),
-        // };
-
         let weeks_since = Duration::num_weeks(&age);
+
+        // Avoid panicking due to string manipulation >_>
+        let fmt_disc_date = match row.discovery_date.len() {
+            0 => "unknown",
+            _ => &row.discovery_date[5..17]
+        };
+
+        let fmt_last_update = match row.last_update.len() {
+            0 => "unknown",
+            _ => &row.last_update[5..17]
+        };
 
         db_table.add_row(row![
             row.name,
             format!("{:?}", row.admins),
-            row.discovery_date,
-            row.last_update,
+            fmt_disc_date,
+            fmt_last_update,
             weeks_since,
             row.cause,
         ]);
@@ -713,7 +722,6 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
 }
 
 fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem) -> Result<()> {
-    dbg!(&item.last_update);
     let coll = mongo_client
         .db("SHELFLIFE")
         .collection(&collection);
