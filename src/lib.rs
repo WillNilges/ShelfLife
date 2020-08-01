@@ -8,12 +8,11 @@ extern crate lettre_email;
 extern crate dotenv;
 
 use mongodb::db::ThreadedDatabase;
-use mongodb::ordered::OrderedDocument;
-use mongodb::{bson, doc, Bson, ThreadedClient, Document};
+use mongodb::{bson, doc, Bson, ThreadedClient};
 use prettytable::Table;
 use protocol::*;
 use reqwest::StatusCode;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use lettre::smtp::authentication::{Credentials, Mechanism};
 use lettre::{Transport, SmtpClient};
 use lettre::smtp::ConnectionReuseParameters;
@@ -85,8 +84,7 @@ pub fn query_known_namespace(
                              .collection(collection)
                              .find_one(Some(doc!{"name": namespace}), None) {
         Ok(Some(db_result)) => {
-            println!("Found an item in mongodb!");
-            dbg!(db_result.get_str("discovery_date"));
+            println!("Found an item already in the DB!");
             Some(db_result)
         },
         Ok(None) => {
@@ -344,14 +342,24 @@ pub fn check_expiry_dates(
 
     let namespaces: Vec<DBItem> = get_db(mongo_client, collection).unwrap();
     for item in namespaces.iter(){
-        let last_update = DateTime::parse_from_rfc2822(&item.last_update);
-        let _last_update_unwrapped = Some(last_update);
-
+        // Compare last update and discovery date and see which one is more recent and go off of that.
+        let last_update = DateTime::parse_from_rfc2822(&item.last_update).unwrap();
+        let age = match DateTime::parse_from_rfc2822(&item.discovery_date) {
+            Ok(date) => {
+                let discovery_date = date;
+                let since = match last_update.signed_duration_since(discovery_date) {
+                    d if d > Duration::nanoseconds(0) => Utc::now().signed_duration_since(last_update),
+                    _ => Utc::now().signed_duration_since(discovery_date),
+                };
+                since
+            },
+            _ => {
+                Utc::now().signed_duration_since(last_update)
+            }
+        };
+        
         print!("Checking status of {}...", &item.name);
 
-        match last_update {
-            Ok(last_update_unwrapped) => {
-                let age = Utc::now().signed_duration_since(last_update_unwrapped);
                 let addr: &str = &*email_addr;
                 // TWENTY FOUR WEEKS!
                 if age > chrono::Duration::weeks(24) { // Check longest first, decending.
@@ -499,9 +507,9 @@ pub fn check_expiry_dates(
                 } else {
                     println!(" ok.");
                 }
-            }
-            Err(_) => {}
-        }
+            // }
+            // Err(_) => {}
+        // }
     }
     mailer.close(); 
     Ok(())
