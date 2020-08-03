@@ -101,14 +101,14 @@ pub fn query_known_namespace(
     let mut namespace_info = get_shelflife_info(http_client, namespace,)?;
 
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db(mongo_client, &collection)?;
+    let current_table: Vec<DBItem> = get_db(mongo_client, &collection).unwrap();
     
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
     let queried_namespace = namespace_info.name.to_string();
     if !current_table.iter().any(|x| x.name.to_string() == queried_namespace) {
         let mut add = false;
         println!("This namespace ({}) is not in the database. ", queried_namespace);
-        let whitelist: Vec<DBItem> = get_db(mongo_client, "whitelist")?;
+        let whitelist: Vec<DBItem> = get_db(mongo_client, "whitelist").unwrap();
         if collection == "graylist" {
             if whitelist.iter().any(|x| x.name.to_string() == queried_namespace) {
                 println!("However, it's whitelisted. Skipping...");
@@ -611,7 +611,7 @@ pub fn delete_call_api(http_client: &reqwest::Client, call: &str,) -> Result<req
 /*                                  DATABASE FUNCTIONS  */
 /*  --------------------------------------------------  */
 
-fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem>> {
+pub fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Option<Vec<DBItem>> {
     let coll = mongo_client
         .db("SHELFLIFE")
         .collection(&collection);
@@ -654,12 +654,12 @@ fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem
             namespace_table.push(namespace_document);
         }
     }
-    Ok(namespace_table)
+    Some(namespace_table)
 }
 
 pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db(mongo_client, collection)?;
+    let current_table: Vec<DBItem> = get_db(mongo_client, collection).unwrap();
     match collection.as_ref() {
         "graylist" => {
             println!("\nGraylisted projects:");

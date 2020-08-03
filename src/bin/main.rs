@@ -7,16 +7,18 @@ use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
+mod api;
+
 use shelflife::{
-                check_env,
-                query_known_namespace,
-                check_expiry_dates,
-                get_call_api,
-                get_namespaces,
-                remove_db_item,
-                view_db,
-                Result
-            };
+    check_env,
+    query_known_namespace,
+    check_expiry_dates,
+    get_call_api,
+    get_namespaces,
+    remove_db_item,
+    view_db,
+    Result
+};
 
 fn main() -> Result<()> {
     //TODO: Investigate if this is the best way to go about
@@ -84,6 +86,10 @@ fn main() -> Result<()> {
             .short("w")
             .long("whitelist")
             .help("Enables whitelist mode for that command, performing operations on the whitelist instead of the greylist."))
+        .arg(Arg::with_name("service")
+            .short("s")
+            .long("service")
+            .help("Starts the API service."))
         .get_matches();
 
     let mut collection = "graylist";
@@ -123,6 +129,10 @@ fn main() -> Result<()> {
 
     if matches.occurrences_of("list") > 0 {
         view_db(&mongo_client, collection)?;
+    }
+
+    if matches.occurrences_of("service") > 0 {
+        api::main();
     }
 
     Ok(())

@@ -1,4 +1,5 @@
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
+
 
 // ------------------------------
 // Structs for project names
@@ -122,6 +123,7 @@ pub struct RolebindingsResponse {
 // ------------------------------
 
 // Struct to represent a DB Object
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DBItem {
     pub name: String,
     pub admins: Vec<String>,
