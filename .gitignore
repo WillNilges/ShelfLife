@@ -1,5 +1,6 @@
 # Environment file
 .env
+*.log
 
 # Rust build files
 /target
