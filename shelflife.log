@@ -1,0 +1,110 @@
+2020-08-04T00:20:58.589664753+00:00 - INFO - Running ShelfLife...
+2020-08-04T00:20:58.591219596+00:00 - INFO - Running in graylist mode.
+2020-08-04T00:20:58.591403676+00:00 - INFO - Querying OKD API for namespace information...
+2020-08-04T00:20:58.799422282+00:00 - INFO - Updated namespace: angel
+2020-08-04T00:20:59.059215367+00:00 - INFO - Discovered new namespace: default
+2020-08-04T00:20:59.271286097+00:00 - INFO - Updated namespace: dudehaha
+2020-08-04T00:20:59.507201799+00:00 - INFO - Updated namespace: fuuuuck
+2020-08-04T00:20:59.751163158+00:00 - INFO - Updated namespace: krobbin
+2020-08-04T00:20:59.987209020+00:00 - INFO - Discovered new namespace: kube-public
+2020-08-04T00:21:00.179371948+00:00 - INFO - Discovered new namespace: kube-system
+2020-08-04T00:21:00.376504480+00:00 - INFO - Discovered new namespace: ligma
+2020-08-04T00:21:00.955396429+00:00 - INFO - Updated namespace: managednamestest
+2020-08-04T00:21:01.195302633+00:00 - INFO - Updated namespace: managednamestest2
+2020-08-04T00:21:01.499265556+00:00 - INFO - Discovered new namespace: management-infra
+2020-08-04T00:21:01.691195398+00:00 - INFO - Discovered new namespace: openshift
+2020-08-04T00:21:01.883280128+00:00 - INFO - Discovered new namespace: openshift-infra
+2020-08-04T00:21:02.079264570+00:00 - INFO - Discovered new namespace: openshift-logging
+2020-08-04T00:21:02.867330535+00:00 - INFO - Discovered new namespace: openshift-monitoring
+2020-08-04T00:21:03.091276059+00:00 - INFO - Discovered new namespace: openshift-node
+2020-08-04T00:21:03.283140822+00:00 - INFO - Discovered new namespace: openshift-sdn
+2020-08-04T00:21:03.479132699+00:00 - INFO - Discovered new namespace: openshift-web-console
+2020-08-04T00:21:03.671297043+00:00 - INFO - Discovered new namespace: project2
+2020-08-04T00:21:03.871118813+00:00 - INFO - Updated namespace: quotefault
+2020-08-04T00:21:04.111183540+00:00 - INFO - Updated namespace: shelflife
+2020-08-04T00:21:04.351415429+00:00 - INFO - Updated namespace: shelflife-deb-up
+2020-08-04T00:21:05.351515226+00:00 - INFO - Updated namespace: spex-site
+2020-08-04T00:21:05.591334552+00:00 - INFO - Updated namespace: yorbix
+2020-08-04T00:21:05.679702692+00:00 - INFO - OKD Query complete.
+2020-08-04T00:23:02.583369169+00:00 - INFO - Running ShelfLife...
+2020-08-04T00:23:02.585183811+00:00 - INFO - Running in graylist mode.
+2020-08-04T00:23:02.585366869+00:00 - INFO - Querying OKD API for namespace information...
+2020-08-04T00:23:02.859267091+00:00 - INFO - Updated namespace: angel
+2020-08-04T00:23:03.111150278+00:00 - INFO - Discovered new namespace: default
+2020-08-04T00:23:03.156201832+00:00 - WARN - However, it's whitelisted. Skipping...
+2020-08-04T00:23:03.299129908+00:00 - INFO - Updated namespace: dudehaha
+2020-08-04T00:23:04.179212464+00:00 - INFO - Updated namespace: fuuuuck
+2020-08-04T00:23:04.419494099+00:00 - INFO - Updated namespace: krobbin
+2020-08-04T00:23:04.651152643+00:00 - INFO - Discovered new namespace: kube-public
+2020-08-04T00:23:04.696170348+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:04.843290546+00:00 - INFO - Discovered new namespace: kube-system
+2020-08-04T00:23:04.888169739+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:05.311246770+00:00 - INFO - Discovered new namespace: ligma
+2020-08-04T00:23:05.356146912+00:00 - WARN - However, it's whitelisted. Skipping...
+2020-08-04T00:23:05.503597461+00:00 - INFO - Updated namespace: managednamestest
+2020-08-04T00:23:06.799314881+00:00 - INFO - Updated namespace: managednamestest2
+2020-08-04T00:23:07.039504078+00:00 - INFO - Discovered new namespace: management-infra
+2020-08-04T00:23:07.084641636+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:07.227207770+00:00 - INFO - Discovered new namespace: openshift
+2020-08-04T00:23:07.272200414+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:07.459525908+00:00 - INFO - Discovered new namespace: openshift-infra
+2020-08-04T00:23:07.504169028+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:07.647271727+00:00 - INFO - Discovered new namespace: openshift-logging
+2020-08-04T00:23:07.692277348+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:07.839394087+00:00 - INFO - Discovered new namespace: openshift-monitoring
+2020-08-04T00:23:07.884458120+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:08.027693397+00:00 - INFO - Discovered new namespace: openshift-node
+2020-08-04T00:23:08.072693630+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:08.219423035+00:00 - INFO - Discovered new namespace: openshift-sdn
+2020-08-04T00:23:08.264514339+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:08.407701645+00:00 - INFO - Discovered new namespace: openshift-web-console
+2020-08-04T00:23:08.452452578+00:00 - WARN - However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...
+2020-08-04T00:23:09.043379305+00:00 - INFO - Discovered new namespace: project2
+2020-08-04T00:23:09.088406208+00:00 - WARN - However, it's whitelisted. Skipping...
+2020-08-04T00:23:09.239842466+00:00 - INFO - Updated namespace: quotefault
+2020-08-04T00:23:09.475160922+00:00 - INFO - Updated namespace: shelflife
+2020-08-04T00:23:09.711173874+00:00 - INFO - Updated namespace: shelflife-deb-up
+2020-08-04T00:23:09.951213918+00:00 - INFO - Updated namespace: spex-site
+2020-08-04T00:23:10.187432690+00:00 - INFO - Updated namespace: yorbix
+2020-08-04T00:23:10.275349751+00:00 - INFO - OKD Query complete.
+2020-08-04T00:26:12.481860513+00:00 - INFO - Running ShelfLife...
+2020-08-04T00:26:12.483541060+00:00 - INFO - Running in graylist mode.
+2020-08-04T00:26:12.483689703+00:00 - INFO - Querying OKD API for namespace information...
+2020-08-04T00:26:12.715520512+00:00 - INFO - Updated namespace: angel
+2020-08-04T00:26:12.959175887+00:00 - INFO - Discovered new namespace: default
+2020-08-04T00:26:13.008310868+00:00 - WARN - However, it's whitelisted. Skipped.
+2020-08-04T00:26:13.155488095+00:00 - INFO - Updated namespace: dudehaha
+2020-08-04T00:26:13.391228397+00:00 - INFO - Updated namespace: fuuuuck
+2020-08-04T00:26:13.631271861+00:00 - INFO - Updated namespace: krobbin
+2020-08-04T00:26:14.927328807+00:00 - INFO - Discovered new namespace: kube-public
+2020-08-04T00:26:14.972198373+00:00 - WARN - This namespace has 0 admins. Assuming part of OKD.
+2020-08-04T00:26:15.123210722+00:00 - INFO - Discovered new namespace: kube-system
+2020-08-04T00:26:15.168191573+00:00 - WARN - This namespace has 0 admins. Assuming part of OKD.
+2020-08-04T00:26:15.315226036+00:00 - INFO - Discovered new namespace: ligma
+2020-08-04T00:26:15.360172784+00:00 - WARN - However, it's whitelisted. Skipped.
+2020-08-04T00:26:15.503227935+00:00 - INFO - Updated namespace: managednamestest
+2020-08-04T00:26:15.739538787+00:00 - INFO - Updated namespace: managednamestest2
+2020-08-04T00:26:17.143542423+00:00 - INFO - Discovered new namespace: management-infra
+2020-08-04T00:26:17.188503797+00:00 - WARN - This looks important. Skipped.
+2020-08-04T00:26:17.447504867+00:00 - INFO - Discovered new namespace: openshift
+2020-08-04T00:26:17.492517246+00:00 - WARN - This namespace has 0 admins. Assuming part of OKD.
+2020-08-04T00:26:17.639451463+00:00 - INFO - Discovered new namespace: openshift-infra
+2020-08-04T00:26:17.684592390+00:00 - WARN - This namespace has 0 admins. Assuming part of OKD.
+2020-08-04T00:26:17.835531181+00:00 - INFO - Discovered new namespace: openshift-logging
+2020-08-04T00:26:17.880371652+00:00 - WARN - This namespace has 0 admins. Assuming part of OKD.
+2020-08-04T00:26:18.027443413+00:00 - INFO - Discovered new namespace: openshift-monitoring
+2020-08-04T00:26:18.072486017+00:00 - WARN - This namespace has 0 admins. Assuming part of OKD.
+2020-08-04T00:26:19.455414127+00:00 - INFO - Discovered new namespace: openshift-node
+2020-08-04T00:26:19.500525968+00:00 - WARN - This namespace has 0 admins. Assuming part of OKD.
+2020-08-04T00:26:19.647517893+00:00 - INFO - Discovered new namespace: openshift-sdn
+2020-08-04T00:26:19.692416053+00:00 - WARN - This namespace has 0 admins. Assuming part of OKD.
+2020-08-04T00:26:19.843566791+00:00 - INFO - Discovered new namespace: openshift-web-console
+2020-08-04T00:26:19.888477562+00:00 - WARN - This namespace has 0 admins. Assuming part of OKD.
+2020-08-04T00:26:20.044065880+00:00 - INFO - Discovered new namespace: project2
+2020-08-04T00:26:20.088511712+00:00 - WARN - However, it's whitelisted. Skipped.
+2020-08-04T00:26:20.239348994+00:00 - INFO - Updated namespace: quotefault
+2020-08-04T00:26:20.479449751+00:00 - INFO - Updated namespace: shelflife
+2020-08-04T00:26:20.720467779+00:00 - INFO - Updated namespace: shelflife-deb-up
+2020-08-04T00:26:21.591375944+00:00 - INFO - Updated namespace: spex-site
+2020-08-04T00:26:21.836144477+00:00 - INFO - Updated namespace: yorbix
+2020-08-04T00:26:21.923822577+00:00 - INFO - OKD Query complete.
