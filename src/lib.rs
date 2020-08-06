@@ -285,7 +285,8 @@ pub fn check_expiry_dates(
     http_client: &reqwest::Client, 
     mongo_client: &mongodb::Client, 
     collection: &str,
-    dryrun: bool
+    dryrun: bool,
+    report: bool,
 ) -> Result<()>{
     let endpoint = env::var("ENDPOINT")?; 
 
@@ -344,11 +345,18 @@ pub fn check_expiry_dates(
     println!("Got all env variables.");
 
     if dryrun {
-        // usemail = false;
-        // send_to_root = false;
         println!("We are in DRYRUN MODE! NONE OF SHELFLIFE'S ACTIONS ARE ACTUALLY HAPPENING!");
     }
 
+    let mut report_table = Table::new(); // Create the table for the report
+
+    // Namespace — The namespace
+    // Admins — Who owns and operates it
+    // Age — How many weeks old it is
+    // Action — What ShelfLife is going to do to it
+    report_table.add_row(row!["Namespace", "Admins", "Age", "Action"]);
+
+    let addr: &str = &*email_addr;
     let mut mailer = SmtpClient::new_simple(&email_srv).unwrap()
         .credentials(Credentials::new(email_uname.to_string(), email_passwd.to_string()))
         .smtp_utf8(true)
@@ -363,7 +371,7 @@ pub fn check_expiry_dates(
             Ok(date) => {
                 let discovery_date = date;
                 let since = match last_update.signed_duration_since(discovery_date) {
-                    d if d > Duration::nanoseconds(0) => Utc::now().signed_duration_since(last_update),
+                    d if true => Utc::now().signed_duration_since(last_update), // d > Duration::nanoseconds(0)
                     _ => Utc::now().signed_duration_since(discovery_date),
                 };
                 since
@@ -376,11 +384,17 @@ pub fn check_expiry_dates(
         print!("Checking status of {}...", &item.name);
         info!("Checking status of {}...", &item.name);
 
-        let addr: &str = &*email_addr;
         // TWENTY FOUR WEEKS!
         if age > chrono::Duration::weeks(24) { // Check longest first, decending.
             println!("The last update to {} was more than 24 weeks ago.", &item.name);
-            info!("Age >24 weeks.");
+            warn!("Age >24 weeks.");
+            if report {
+                report_table.add_row(row![
+                    &item.name,
+                    format!("{:?}", item.admins),
+                    Duration::num_weeks(&age),
+                    "Archive"]);
+            }
             if !dryrun {
                 println!("Project marked for deletion...");
                 println!("Exporting project...");
@@ -439,7 +453,14 @@ pub fn check_expiry_dates(
 
         }else if age > chrono::Duration::weeks(16) {
             println!("The last update to {} was more than 16 weeks ago.", &item.name);
-            info!("Age >16 weeks.");
+            warn!("Age >16 weeks.");
+            if report {
+                report_table.add_row(row![
+                    &item.name,
+                    format!("{:?}", item.admins),
+                    Duration::num_weeks(&age),
+                    "Spin-Down"]);
+            }
             if !dryrun {
                 println!("Spinning down...");
                 info!("Spinning down...");
@@ -504,7 +525,14 @@ pub fn check_expiry_dates(
             }
         }else if age > chrono::Duration::weeks(12) {
             println!("The last update to {} was more than 12 weeks ago.", &item.name);
-            info!("Age >12 weeks.");
+            warn!("Age >12 weeks.");
+            if report {
+                report_table.add_row(row![
+                    &item.name,
+                    format!("{:?}", item.admins),
+                    Duration::num_weeks(&age),
+                    "Nudge"]);
+            }
             if !dryrun && usemail {
                 // Find the names of the admins and send them M A I L!
                 println!("Notifying admins...");
@@ -538,7 +566,34 @@ pub fn check_expiry_dates(
             println!(" ok.");
         }
     }
+    if report {
+        let report_message = match dryrun {
+            true => "Hello! ShelfLife is going to take the following actions against these projects soon. If this doesn't look right, hop on a console and fix it!",
+            false => "Hello! ShelfLife has just taken the following actions against these projects. If something doesn't look right, please direct a complaint to /dev/null on any user machine. Thank you for using ShelfLife! Get a job, or get D E L E T E D.", // TODO: Make these customizable with env variables. (crikey this is really just turning into some kind of config file now, innit?)
+        };
+        info!("Sending report...");
+        println!("Sending report...");
+        let email = Email::builder()
+            .to((format!("{}@{}", "wilnil", email_domain), "wilnil")) //TODO: Env variable to stop hardcoding this.
+            .from(addr)
+            .subject(format!("ShelfLife Report"))
+            .text(format!("{} \n {}", report_message, report_table.to_string()))
+            .build();
+        match email {
+            Err(e) => {
+                println!("Could not send email. Invalid email address?");
+                error!("Could not send email.");
+                eprintln!("{}", e);
+            },
+            _ => {
+                let _mail_result = mailer.send(email.unwrap().into());
+            }
+        }
+    }
+
     mailer.close(); 
+    println!("Report Sent: ");
+    report_table.printstd(); // Print the table to stdout
     Ok(())
 }
 
@@ -763,3 +818,49 @@ pub fn remove_db_item(mongo_client: &mongodb::Client, collection: &str, namespac
     println!("{} has been removed from db.", namespace);
     Ok(())
 }
+
+/*                                           REPORTING  */
+/*  --------------------------------------------------  */
+
+// pub fn generate_culling_report() -> Result<Table> {
+    
+//     let mut db_table = Table::new(); // Create the table
+
+//     // Namespace — The namespace
+//     // Admins — Who owns and operates it
+//     // Age — How many weeks old it is
+//     // Action — What ShelfLife is going to do to it
+//     db_table.add_row(row!["Namespace", "Admins", "Age", "Action"]);
+//     db_table.add_row(row![
+//         row.name,
+//         format!("{:?}", row.admins),
+//         fmt_disc_date,
+//         fmt_last_update,
+//         weeks_since,
+//         row.cause,
+//     ]);
+//     db_table.printstd(); // Print the table to stdout
+//     Ok(())
+// }
+
+// fn get_age_weeks(discovery_date_str: String, last_update_str: String) -> Result<i64> {
+//     // This should be safe. Compare discovery date with last update to see
+//         // which is more recent. Copied and pasted from check_expiry_dates().
+//         let last_update = DateTime::parse_from_rfc2822(&last_update_str).unwrap();
+//         let age = match DateTime::parse_from_rfc2822(&discovery_date_str) {
+//             Ok(date) => {
+//                 let discovery_date = date;
+//                 let since = match last_update.signed_duration_since(discovery_date) {
+//                     d if d > Duration::nanoseconds(0) => Utc::now().signed_duration_since(last_update),
+//                     _ => Utc::now().signed_duration_since(discovery_date),
+//                 };
+//                 Ok(since)
+//             },
+//             _ => {
+//                 eprintln!("Looks like discovery date might be empty.");
+//                 Err(Utc::now().signed_duration_since(last_update))
+//             }
+//         };
+
+//         Ok()
+// }

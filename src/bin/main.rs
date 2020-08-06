@@ -72,7 +72,7 @@ fn main() -> Result<()> {
         "******We nuke old projects******\n",
         " Get a job or get D E L E T E D \n"
     );
-    info!("Running ShelfLife...");
+    info!("=== Running ShelfLife... ===");
 
     let matches = App::new("ShelfLife")
         .author("Will N. <willnilges@mail.rit.edu>")
@@ -86,10 +86,18 @@ fn main() -> Result<()> {
             .short("c")
             .long("cull")
             .help("Checks graylist for projects that need attention. Takes appropriate course of action."))
+        .arg(Arg::with_name("cull_with_report")
+            .short("C")
+            .long("cull_with_report")
+            .help("Culls, and generates and sends a report to ShelfLife admins."))
         .arg(Arg::with_name("dryrun")
             .short("d")
             .long("dryrun")
             .help("Checks graylist for projects that need attention. Takes no action."))
+        .arg(Arg::with_name("dryrun_with_report")
+            .short("D")
+            .long("dryrun_with_report")
+            .help("Dryruns, and generates and sends a report to ShelfLife admins."))
         .arg(Arg::with_name("remove")
             .short("r")
             .long("remove")
@@ -135,16 +143,18 @@ fn main() -> Result<()> {
         info!("OKD Query complete.");
     }
  
-    if matches.occurrences_of("cull") > 0 {
+    if matches.occurrences_of("cull") > 0 || matches.occurrences_of("cull_with_report") > 0 {
+        let report = matches.occurrences_of("cull_with_report") > 0;
         info!("Culling...");
         println!("You might want to run the -a option if you haven't already.");
-        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, false); // 'False' as in DRYRUN IS DISABLED THIS IS ACTUALLY DESTRUCTIVE!
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, false, report); // 'False' as in DRYRUN IS DISABLED THIS IS ACTUALLY DESTRUCTIVE!
         info!("Cull complete.");
     }
 
-    if matches.occurrences_of("dryrun") > 0 {
+    if matches.occurrences_of("dryrun") > 0 || matches.occurrences_of("dryrun_with_report") > 0  {
+        let report = matches.occurrences_of("dryrun_with_report") > 0;
         info!("Doing a dryrun cull...");
-        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, true); // This is NOT destructive
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, true, report); // This is NOT destructive
         info!("Dryrun cull complete.");
     }
 
