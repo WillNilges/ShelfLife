@@ -9,20 +9,10 @@ use dotenv::dotenv;
 use mongodb::ThreadedClient;
 
 // Logging. Ehh??
-// use error_chain::error_chain;
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config, Root};
-
-
-// error_chain! {
-//     foreign_links {
-//         Io(std::io::Error);
-//         LogConfig(log4rs::config::Errors);
-//         SetLogger(log::SetLoggerError);
-//     }
-// }
 
 use shelflife::{
                 check_env,
@@ -147,14 +137,16 @@ fn main() -> Result<()> {
         let report = matches.occurrences_of("cull_with_report") > 0;
         info!("Culling...");
         println!("You might want to run the -a option if you haven't already.");
-        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, false, report); // 'False' as in DRYRUN IS DISABLED THIS IS ACTUALLY DESTRUCTIVE!
+        // 'False' as in DRYRUN IS DISABLED THIS IS ACTUALLY DESTRUCTIVE!
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, false, report); 
         info!("Cull complete.");
     }
 
     if matches.occurrences_of("dryrun") > 0 || matches.occurrences_of("dryrun_with_report") > 0  {
         let report = matches.occurrences_of("dryrun_with_report") > 0;
         info!("Doing a dryrun cull...");
-        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, true, report); // This is NOT destructive
+        // This is NOT destructive
+        let _expiration = check_expiry_dates(&http_client, &mongo_client, collection, true, report); 
         info!("Dryrun cull complete.");
     }
 

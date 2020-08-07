@@ -295,6 +295,7 @@ pub fn check_expiry_dates(
     let email_passwd = env::var("EMAIL_PASSWD")?;
     let email_addr = env::var("EMAIL_ADDRESS")?;
     let email_domain = env::var("EMAIL_DOMAIN")?;
+    let root_email = env::var("MAIL_ROOT_ADDR")?;
 
     // See if we should email anyone about what we're doing.
     // This is mostly for development purposes.
@@ -371,7 +372,7 @@ pub fn check_expiry_dates(
             Ok(date) => {
                 let discovery_date = date;
                 let since = match last_update.signed_duration_since(discovery_date) {
-                    d if true => Utc::now().signed_duration_since(last_update), // d > Duration::nanoseconds(0)
+                    d if d > Duration::nanoseconds(0) => Utc::now().signed_duration_since(last_update),
                     _ => Utc::now().signed_duration_since(discovery_date),
                 };
                 since
@@ -574,7 +575,7 @@ pub fn check_expiry_dates(
         info!("Sending report...");
         println!("Sending report...");
         let email = Email::builder()
-            .to((format!("{}@{}", "wilnil", email_domain), "wilnil")) //TODO: Env variable to stop hardcoding this.
+            .to((format!("{}@{}", root_email, email_domain), root_email))
             .from(addr)
             .subject(format!("ShelfLife Report"))
             .text(format!("{} \n {}", report_message, report_table.to_string()))
@@ -818,49 +819,3 @@ pub fn remove_db_item(mongo_client: &mongodb::Client, collection: &str, namespac
     println!("{} has been removed from db.", namespace);
     Ok(())
 }
-
-/*                                           REPORTING  */
-/*  --------------------------------------------------  */
-
-// pub fn generate_culling_report() -> Result<Table> {
-    
-//     let mut db_table = Table::new(); // Create the table
-
-//     // Namespace — The namespace
-//     // Admins — Who owns and operates it
-//     // Age — How many weeks old it is
-//     // Action — What ShelfLife is going to do to it
-//     db_table.add_row(row!["Namespace", "Admins", "Age", "Action"]);
-//     db_table.add_row(row![
-//         row.name,
-//         format!("{:?}", row.admins),
-//         fmt_disc_date,
-//         fmt_last_update,
-//         weeks_since,
-//         row.cause,
-//     ]);
-//     db_table.printstd(); // Print the table to stdout
-//     Ok(())
-// }
-
-// fn get_age_weeks(discovery_date_str: String, last_update_str: String) -> Result<i64> {
-//     // This should be safe. Compare discovery date with last update to see
-//         // which is more recent. Copied and pasted from check_expiry_dates().
-//         let last_update = DateTime::parse_from_rfc2822(&last_update_str).unwrap();
-//         let age = match DateTime::parse_from_rfc2822(&discovery_date_str) {
-//             Ok(date) => {
-//                 let discovery_date = date;
-//                 let since = match last_update.signed_duration_since(discovery_date) {
-//                     d if d > Duration::nanoseconds(0) => Utc::now().signed_duration_since(last_update),
-//                     _ => Utc::now().signed_duration_since(discovery_date),
-//                 };
-//                 Ok(since)
-//             },
-//             _ => {
-//                 eprintln!("Looks like discovery date might be empty.");
-//                 Err(Utc::now().signed_duration_since(last_update))
-//             }
-//         };
-
-//         Ok()
-// }
