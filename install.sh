@@ -1,29 +1,46 @@
-#Install MongoDB
-echo Installing MongoDB...
-wget -qO - https://www.mongodb.org/static/pgp/server-4.2.asc | sudo apt-key add -
-echo "deb [ arch=amd64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/4.2 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.2.list
-sudo apt-get update
-sudo apt-get install -y mongodb-org
-sudo systemctl enable mongod && sudo systemctl start mongod
+#!/bin/bash
 
-echo Installing Rust Toolchain...
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
+set -e
 
-echo Install build deps
-sudo apt install -y build-essential libssl-dev pkg-config
+RELEASE_REPO=https://api.github.com/repos/willnilges/shelflife/releases/latest
 
-#git clone http://www.github.com/willnilges/shelflife
-#cd shelflife
-cp .env.sample .env
-cargo build
-echo Repo cloned! Please fill out the .env file!
+get_file () {
+curl -s "$RELEASE_REPO" \
+	| grep "$1" \
+	| cut -d : -f 2,3 \
+	| tr -d \" \
+	| wget -qi -
+}
 
-# Cron job config. Ask the user what they want
-echo Enter cron job parameters:
-read cron_params
+if [ "$UID" -ne 0 ]; then
+	echo "Please run as root."
+	exit 1
+fi
 
-crontab -l > mycron
-echo "$cron_params $(pwd)/target/debug/shelflife -c" >> mycron
-crontab mycron
-rm mycron
+echo "Install to /usr/local/bin/shelflife"
+mkdir /usr/local/bin/shelflife \
+	|| echo "Directory already exists. I guess this'll be an upgrade."
+cd /usr/local/bin/shelflife
+
+echo "Downloading binary..."
+get_file shelflife
+get_file env.sample
+if ! test -f ".env"; then
+	mv env.sample .env
+fi
+chmod +x shelflife
+
+# TODO: Don't overwrite crontab settings
+echo "Edit crontab"
+crontab -l > mycron_tmp
+
+echo "
+0 * * * 1-3 /usr/local/bin/shelflife -a
+0 * * * 6-7 /usr/loca/bin/shelflife -a
+0 12 * * 4 /usr/local/bin/shelflife -D
+0 12 * * 5 /usr/local/bin/shelflife -C
+" >> mycron_tmp
+crontab mycron_tmp
+rm mycron_tmp
+
+echo "Done. Please fill out the .env file in /usr/local/bin/shelflife"
