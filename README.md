@@ -79,14 +79,7 @@ Firstly, I just wanna say, "Thanks!"
 
 Next, here's what you'll need:
 
-#### Build Dependencies
-
-- Ubuntu (Server 18.04 recommended)
-- `build-essential`
-- `libssl-dev`
-- `pkg-config`
-
-## Setup
+### Prerequisites 
 
 * An Openshift cluster that can be accessed via API calls
 * An admin™ account for ShelfLife to view and manage namespaces
@@ -95,7 +88,15 @@ Next, here's what you'll need:
   other miscellaneous things. Get started by copying the provided `.env.sample`
   file to `.env` and then fill in the appropriate values.
 
+
 ### Installation
+
+#### Build Dependencies
+
+- Ubuntu (Server 18.04 recommended)
+- `build-essential`
+- `libssl-dev`
+- `pkg-config`
 
 - Clone the repo and run the install script.
 ```
