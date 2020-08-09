@@ -8,8 +8,12 @@ extern crate lettre;
 extern crate lettre_email;
 extern crate dotenv;
 
-use mongodb::db::ThreadedDatabase;
-use mongodb::{bson, doc, Bson, ThreadedClient};
+// use mongodb::db::ThreadedDatabase;
+// use mongodb::{bson, Client};
+use mongodb::{
+    bson::{doc, Bson},
+    sync::Client,
+};
 use prettytable::Table;
 use protocol::*;
 use reqwest::StatusCode;
@@ -55,36 +59,46 @@ pub fn check_env() { // TODO: Actually use results.
 pub fn get_namespaces(http_client: &reqwest::Client) -> Result<Vec<String>> {
     let endpoint = env::var("ENDPOINT")?; 
     let projects_call = format!("https://{}/apis/project.openshift.io/v1/projects", endpoint); 
-    let projects_resp = get_call_api(&http_client, &projects_call);
+    let mut projects = Vec::new();
 
-    match projects_resp {
-        Ok(mut call_reply) => {
-            let mut projects = Vec::new();
-            let projects_json: ProjectResponse = call_reply.json()?;
+    let projects_resp = match get_call_api(&http_client, &projects_call) {
+        Ok(response) => {
+            dbg!(response);
+        }
+    };
+
+    Ok(projects)
+
+    // match projects_resp {
+    //     Ok(mut call_reply) => {
+    //         let mut projects = Vec::new();
+    //         let projects_json: ProjectResponse = call_reply.json();
             
-            for item in projects_json.items {
-                projects.push(item.metadata.name);
-            }
-            dbg!(&projects);
-            return Ok(projects)
-        },
-        Err(e) => return Err(e)
-    }
+    //         for item in projects_json.items {
+    //             projects.push(item.metadata.name);
+    //         }
+    //         dbg!(&projects);
+    //         return Ok(projects)
+    //     },
+    //     Err(e) => return Err(e)
+    // }
 }
 
 //Queries API for a project namespace name 
-pub fn query_known_namespace(
-    mongo_client: &mongodb::Client,
-    collection: &str,
+pub async fn query_known_namespace(
+    mongo_client: Client,
+    collection_title: &str,
     http_client: &reqwest::Client,
     namespace: &str,
     autoadd: bool,
 ) -> Result<()> {
     // Check the MongoDB to see if we have anything by that name.
     let current_item = match mongo_client
-                             .db("SHELFLIFE")
-                             .collection(collection)
-                             .find_one(Some(doc!{"name": namespace}), None) {
+        .database("SHELFLIFE")
+        .collection(collection_title)
+        .find_one(Some(doc!{"name": namespace}), None)
+    {
+
         Ok(Some(db_result)) => {
             println!("{} already discovered.", namespace);
             Some(db_result)
@@ -97,14 +111,39 @@ pub fn query_known_namespace(
             eprintln!("{}", e);
             panic!("Cannot connect to DB!"); // TODO: Consider if we want to panic here.
         }
+
     };
+
+    // // Query the documents in the collection with a filter and an option.
+    // // let client = Client::with_uri_str("mongodb://localhost:27017")?;
+    // let database = mongo_client.database("SHELFLIFE");
+    // let collection = database.collection(&collection_title);
+
+    // let mut current_item = None;
+    // let cursor = collection.find(doc! { "name": namespace }, None)?;
+    // for result in cursor {
+    //     match result {
+    //         Ok(document) => {
+    //             if let Some(name) = document.get("name").and_then(Bson::as_str) {
+    //                 println!("{} already discovered", name);
+    //                 current_item = Some(name);
+    //             } else {
+    //                 println!("{} not yet discovered.", namespace);
+    //             }
+    //         }
+    //         Err(e) => {
+    //             eprintln!("{}", e);
+    //             panic!("Cannot connect to DB!"); // TODO: Consider if we want to panic here.
+    //         },
+    //     }
+    // }
 
     // Get all the data we need from the OpenShift API.
     println!("{}",format!("Querying API for namespace {}...", namespace).to_string());
     let mut namespace_info = get_shelflife_info(http_client, namespace,)?;
 
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db(mongo_client, &collection)?;
+    let current_table: Vec<DBItem> = get_db(&mongo_client, &collection_title)?;
     
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
     let queried_namespace = namespace_info.name.to_string();
@@ -112,8 +151,8 @@ pub fn query_known_namespace(
         let mut add = false;
         println!("This namespace ({}) is not in the database. ", queried_namespace);
         info!("Discovered new namespace: {}", &queried_namespace);
-        let whitelist: Vec<DBItem> = get_db(mongo_client, "whitelist")?;
-        if collection == "graylist" {
+        let whitelist: Vec<DBItem> = get_db(&mongo_client, "whitelist")?;
+        if collection_title == "graylist" {
             if whitelist.iter().any(|x| x.name.to_string() == queried_namespace) {
                 println!("However, it's whitelisted. Skipped.");
                 warn!("However, it's whitelisted. Skipped.");
@@ -154,20 +193,20 @@ pub fn query_known_namespace(
             let now = Utc::now();
             let nowrfc = now.to_rfc2822();
             namespace_info.discovery_date = nowrfc;
-             match collection.as_ref() {
+             match collection_title.as_ref() {
                 "graylist" => {
                     println!("Graylisting {}\n", queried_namespace);
                 }
                 "whitelist" => {
                     println!("Whitelisting {}...\n", queried_namespace);
                     print!("Removing theoretical greylist entry... ");
-                    let _db_result = remove_db_item(mongo_client, "graylist", &queried_namespace);
+                    let _db_result = remove_db_item(&mongo_client, "graylist", &queried_namespace);
                 }
                 _ => {
                     println!("Unknown table:\n");
                 }
             }
-            let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
+            let _table_add = add_item_to_db(&mongo_client, &collection_title, namespace_info);
         } else {
             println!("Invalid response.");
         }
@@ -181,8 +220,8 @@ pub fn query_known_namespace(
         };
         namespace_info.discovery_date = discovery_date; //TODO: I think there's an error to catch here.
         //TODO: Update db entry instead of adding and removing it.
-        let _db_result = remove_db_item(mongo_client, collection, &queried_namespace);
-        let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
+        let _db_result = remove_db_item(&mongo_client, collection_title, &queried_namespace);
+        let _table_add = add_item_to_db(&mongo_client, &collection_title, namespace_info);
         println!("Entry updated.");
     }
     Ok(())
@@ -283,7 +322,7 @@ fn get_shelflife_info(
 
 pub fn check_expiry_dates(
     http_client: &reqwest::Client, 
-    mongo_client: &mongodb::Client, 
+    mongo_client: Client, 
     collection: &str,
     dryrun: bool,
     report: bool,
@@ -364,7 +403,7 @@ pub fn check_expiry_dates(
         .authentication_mechanism(Mechanism::Plain)
         .connection_reuse(ConnectionReuseParameters::ReuseUnlimited).transport();
 
-    let namespaces: Vec<DBItem> = get_db(mongo_client, collection).unwrap();
+    let namespaces: Vec<DBItem> = get_db(&mongo_client, collection).unwrap();
     for item in namespaces.iter(){
         // Compare last update and discovery date and see which one is more recent and go off of that.
         let last_update = DateTime::parse_from_rfc2822(&item.last_update).unwrap();
@@ -691,9 +730,9 @@ pub fn delete_call_api(http_client: &reqwest::Client, call: &str,) -> Result<req
 /*                                  DATABASE FUNCTIONS  */
 /*  --------------------------------------------------  */
 
-fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem>> {
+fn get_db(&mongo_client: &Client, collection: &str) -> Result<Vec<DBItem>> {
     let coll = mongo_client
-        .db("SHELFLIFE")
+        .database("SHELFLIFE")
         .collection(&collection);
     let mut namespace_table = Vec::new(); // The vec of namespace information we're gonna send back.
 
@@ -737,9 +776,9 @@ fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem
     Ok(namespace_table)
 }
 
-pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
+pub fn view_db(mongo_client: &Client, collection: &str) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db(mongo_client, collection)?;
+    let current_table: Vec<DBItem> = get_db(&mongo_client, collection)?;
     match collection.as_ref() {
         "graylist" => {
             println!("\nGraylisted projects:");
@@ -797,12 +836,12 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
     Ok(())
 }
 
-fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem) -> Result<()> {
+fn add_item_to_db(mongo_client: &Client, collection: &str, item: DBItem) -> Result<()> {
     let coll = mongo_client
-        .db("SHELFLIFE")
+        .database("SHELFLIFE")
         .collection(&collection);
     coll.insert_one(doc!{"name": item.name,
-                         "admins": bson::to_bson(&item.admins)?,
+                         "admins": Bson::to_bson(&item.admins)?,
                          "discovery_date": item.discovery_date, 
                          "last_update": item.last_update, 
                          "cause": item.cause}, None)
@@ -810,9 +849,9 @@ fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem
     Ok(())
 }
 
-pub fn remove_db_item(mongo_client: &mongodb::Client, collection: &str, namespace: &str) -> Result<()> {
+pub fn remove_db_item(mongo_client: &Client, collection: &str, namespace: &str) -> Result<()> {
     let coll = mongo_client
-        .db("SHELFLIFE")
+        .database("SHELFLIFE")
         .collection(collection);
     coll.find_one_and_delete(doc!{"name": namespace}, None)
         .unwrap();

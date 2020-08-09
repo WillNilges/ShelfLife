@@ -6,7 +6,10 @@ extern crate dotenv;
 use std::env;
 use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
-use mongodb::ThreadedClient;
+use mongodb::{
+    bson::{doc, Bson},
+    sync::Client,
+};
 
 // Logging. Ehh??
 use log::LevelFilter;
@@ -15,15 +18,15 @@ use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config, Root};
 
 use shelflife::{
-                check_env,
-                query_known_namespace,
-                check_expiry_dates,
-                get_call_api,
-                get_namespaces,
-                remove_db_item,
-                view_db,
-                Result
-            };
+    check_env,
+    query_known_namespace,
+    check_expiry_dates,
+    get_call_api,
+    get_namespaces,
+    remove_db_item,
+    view_db,
+    Result
+};
 
 fn main() -> Result<()> {
     //TODO: Investigate if this is the best way to go about
@@ -44,16 +47,19 @@ fn main() -> Result<()> {
 
     log4rs::init_config(config)?;
 
+    // OKD API stuff
     let endpoint = env::var("ENDPOINT")?;
-    
     let http_client = reqwest::Client::new();
-    let mongo_client = mongodb::Client::connect(
-        &env::var("DB_ADDR")?,
-        env::var("DB_PORT")?
-            .parse::<u16>()
-            .expect("DB_PORT should be an integer"),
-    )
-    .expect("should connect to mongodb");
+
+    // Mongo stuff
+    // let mongo_client = mongodb::Client::connect(
+    //     &env::var("DB_ADDR")?,
+    //     env::var("DB_PORT")?
+    //         .parse::<u16>()
+    //         .expect("DB_PORT should be an integer"),
+    // )
+    // .expect("should connect to mongodb");
+    let mongo_client = Client::with_uri_str("localhost")?;
 
     // Friendly and polite greeting...
     println!(

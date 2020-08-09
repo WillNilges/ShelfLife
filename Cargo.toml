@@ -1,25 +1,25 @@
 [package]
 name = "shelflife"
-version = "1.2.0"
+version = "1.2.1"
 authors = ["wilnil"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = "2.33.0"
-dotenv = "0.14.1"
+clap = "2.33.2"
+dotenv = "0.15.0"
 prettytable-rs = "0.8.0"
-reqwest = "0.9.19"
-serde = "1.0.97"
-serde_yaml = "0.8.9"
-serde_json = "1.0.40"
-mongodb = "0.3.12"
-chrono = { version = "0.4.7", features = ["serde"] }
-lettre = "0.9"
-lettre_email = "0.9"
+reqwest = { version = "0.10.7", features = ["json"] }
+serde = "1.0.114"
+serde_yaml = "0.8.13"
+serde_json = "1.0.57"
+mongodb = { version = "1.0.0", features = ["sync"], default-features = false }
+chrono = { version = "0.4.13", features = ["serde"] }
+lettre = "0.9.3"
+lettre_email = "0.9.4"
 lazy_static = "1.4.0"
-regex = "1.3.7"
+regex = "1.3.9"
 log = "0.4.11"
 log4rs = "0.13.0"
 error-chain = "0.12.4"
