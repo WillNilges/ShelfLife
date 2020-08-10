@@ -548,7 +548,7 @@ pub fn check_expiry_dates(
                             .to((format!("{}@{}", strpname, email_domain), strpname))
                             .from(addr)
                             .subject(format!("Old OKD project: {}", &item.name))
-                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's ignore. Thanks!.", &item.name, &item.last_update))
+                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to have ShelfLife ignore it. Thanks!.", &item.name, &item.last_update))
                             .build();
                         match email {
                             Err(e) => {
