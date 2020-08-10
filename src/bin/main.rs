@@ -110,14 +110,14 @@ fn main() -> Result<()> {
             .short("l")
             .long("list")
             .help("Print namespaces currently tracked in the database."))
-        .arg(Arg::with_name("ignorelist")
+        .arg(Arg::with_name("ignore_list")
             .short("i")
-            .long("ignorelist")
+            .long("ignore_list")
             .help("Enables ignore mode for that command, performing operations on the list of ignored projects instead of the list of tracked projects."))
         .get_matches();
 
     let mut collection = "track";
-    if matches.occurrences_of("ignorelist") > 0 {
+    if matches.occurrences_of("ignore_list") > 0 {
         collection = "ignore";
         info!("Running in ignored mode.")
     } else {
