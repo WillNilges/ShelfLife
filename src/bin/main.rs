@@ -75,7 +75,7 @@ fn main() -> Result<()> {
         .arg(Arg::with_name("cull")
             .short("c")
             .long("cull")
-            .help("Checks graylist for projects that need attention. Takes appropriate course of action."))
+            .help("Checks for tracked projects that need attention. Takes appropriate course of action."))
         .arg(Arg::with_name("cull_with_report")
             .short("C")
             .long("cull_with_report")
@@ -83,7 +83,7 @@ fn main() -> Result<()> {
         .arg(Arg::with_name("dryrun")
             .short("d")
             .long("dryrun")
-            .help("Checks graylist for projects that need attention. Takes no action."))
+            .help("Checks for tracked projects that need attention. Takes no action."))
         .arg(Arg::with_name("dryrun_with_report")
             .short("D")
             .long("dryrun_with_report")
@@ -110,18 +110,18 @@ fn main() -> Result<()> {
             .short("l")
             .long("list")
             .help("Print namespaces currently tracked in the database."))
-        .arg(Arg::with_name("whitelist")
-            .short("w")
-            .long("whitelist")
-            .help("Enables whitelist mode for that command, performing operations on the whitelist instead of the greylist."))
+        .arg(Arg::with_name("ignorelist")
+            .short("i")
+            .long("ignorelist")
+            .help("Enables ignore mode for that command, performing operations on the list of ignored projects instead of the list of tracked projects."))
         .get_matches();
 
-    let mut collection = "graylist";
-    if matches.occurrences_of("whitelist") > 0 {
-        collection = "whitelist";
-        info!("Running in whitelist mode.")
+    let mut collection = "track";
+    if matches.occurrences_of("ignorelist") > 0 {
+        collection = "ignore";
+        info!("Running in ignored mode.")
     } else {
-        info!("Running in graylist mode.")
+        info!("Running in tracking mode.")
     }
 
     if matches.occurrences_of("all") > 0 {
