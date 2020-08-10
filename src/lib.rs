@@ -112,11 +112,11 @@ pub fn query_known_namespace(
         let mut add = false;
         println!("This namespace ({}) is not in the database. ", queried_namespace);
         info!("Discovered new namespace: {}", &queried_namespace);
-        let whitelist: Vec<DBItem> = get_db(mongo_client, "whitelist")?;
-        if collection == "graylist" {
-            if whitelist.iter().any(|x| x.name.to_string() == queried_namespace) {
-                println!("However, it's whitelisted. Skipped.");
-                warn!("However, it's whitelisted. Skipped.");
+        let ignore: Vec<DBItem> = get_db(mongo_client, "ignore")?;
+        if collection == "track" {
+            if ignore.iter().any(|x| x.name.to_string() == queried_namespace) {
+                println!("However, it's ignored. Skipped.");
+                warn!("However, it's ignored. Skipped.");
                 return Ok(());
             }
             if namespace_info.admins.len() == 0 {
@@ -155,13 +155,13 @@ pub fn query_known_namespace(
             let nowrfc = now.to_rfc2822();
             namespace_info.discovery_date = nowrfc;
              match collection.as_ref() {
-                "graylist" => {
-                    println!("Graylisting {}\n", queried_namespace);
+                "track" => {
+                    println!("Tracking {}\n", queried_namespace);
                 }
-                "whitelist" => {
-                    println!("Whitelisting {}...\n", queried_namespace);
-                    print!("Removing theoretical greylist entry... ");
-                    let _db_result = remove_db_item(mongo_client, "graylist", &queried_namespace);
+                "ignore" => {
+                    println!("Ignoring {}...\n", queried_namespace);
+                    print!("Removing theoretical tracking entry... ");
+                    let _db_result = remove_db_item(mongo_client, "track", &queried_namespace);
                 }
                 _ => {
                     println!("Unknown table:\n");
@@ -548,7 +548,7 @@ pub fn check_expiry_dates(
                             .to((format!("{}@{}", strpname, email_domain), strpname))
                             .from(addr)
                             .subject(format!("Old OKD project: {}", &item.name))
-                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
+                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's ignore. Thanks!.", &item.name, &item.last_update))
                             .build();
                         match email {
                             Err(e) => {
@@ -741,11 +741,11 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
     let current_table: Vec<DBItem> = get_db(mongo_client, collection)?;
     match collection.as_ref() {
-        "graylist" => {
-            println!("\nGraylisted projects:");
+        "track" => {
+            println!("\nTracked projects:");
         }
-        "whitelist" => {
-            println!("\nWhitelisted projects:");
+        "ignore" => {
+            println!("\nIgnored projects:");
         }
         _ => {
             println!("\nUnknown table:");
