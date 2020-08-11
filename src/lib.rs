@@ -19,13 +19,15 @@ use lettre::{Transport, SmtpClient};
 use lettre::smtp::ConnectionReuseParameters;
 use lettre_email::Email;
 use std::process::Command;
+
+// TODO: Any better way to import this stuff?
 use std::env;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 // Let's make sure those environment variables are set, yea?
 pub fn check_env() { // TODO: Actually use results.
-    let variables = vec!("OKD_TOKEN", "DB_ADDR", "DB_PORT", "SEND_MAIL", "MAIL_ROOT", "EMAIL_SRV","EMAIL_UNAME", "EMAIL_PASSWD", "EMAIL_ADDRESS", "EMAIL_DOMAIN"); 
+    let variables = vec!("OKD_TOKEN", "DB_ADDR", "DB_PORT", "SEND_MAIL", "MAIL_ROOT", "MAIL_ROOT_ADDR", "EMAIL_SRV","EMAIL_UNAME", "EMAIL_PASSWD", "EMAIL_ADDRESS", "EMAIL_DOMAIN", "BACKUP_PATH", "LOG_PATH"); 
 
     for i in variables {
         match env::var(i) {
@@ -74,9 +76,9 @@ pub fn get_namespaces(http_client: &reqwest::Client) -> Result<Vec<String>> {
 
 //Queries API for a project namespace name 
 pub fn query_known_namespace(
+    http_client: &reqwest::Client,
     mongo_client: &mongodb::Client,
     collection: &str,
-    http_client: &reqwest::Client,
     namespace: &str,
     autoadd: bool,
 ) -> Result<()> {
@@ -100,7 +102,7 @@ pub fn query_known_namespace(
     };
 
     // Get all the data we need from the OpenShift API.
-    println!("{}",format!("Querying API for namespace {}...", namespace).to_string());
+    println!("{}",format!("Querying API for namespace \"{}\"...", namespace).to_string());
     let mut namespace_info = get_shelflife_info(http_client, namespace,)?;
 
     // Query the DB and get back a table of already added namespaces
@@ -110,23 +112,23 @@ pub fn query_known_namespace(
     let queried_namespace = namespace_info.name.to_string();
     if !current_table.iter().any(|x| x.name.to_string() == queried_namespace) {
         let mut add = false;
-        println!("This namespace ({}) is not in the database. ", queried_namespace);
+        println!("\"{}\" is not in the database. ", queried_namespace);
         info!("Discovered new namespace: {}", &queried_namespace);
         let ignore: Vec<DBItem> = get_db(mongo_client, "ignore")?;
         if collection == "track" {
             if ignore.iter().any(|x| x.name.to_string() == queried_namespace) {
-                println!("However, it's ignored. Skipped.");
-                warn!("However, it's ignored. Skipped.");
+                println!("However, it's ignored.\nSkipped.");
+                warn!("However, it's ignored.\nSkipped.");
                 return Ok(());
             }
             if namespace_info.admins.len() == 0 {
-                println!("This namespace has 0 admins. Assuming part of OKD.");
-                warn!("This namespace has 0 admins. Assuming part of OKD.");
+                println!("This namespace has 0 admins. Assuming part of OKD.\nSkipped.");
+                warn!("This namespace has 0 admins. Assuming part of OKD.\nSkipped.");
                 return Ok(());
             }
             if namespace_info.name == "management-infra" || namespace_info.name == "default" {
-                println!("This looks important. Skipped.");
-                warn!("This looks important. Skipped.");
+                println!("This looks important.\nSkipped.");
+                warn!("This looks important.\nSkipped.");
                 return Ok(());
             }
         }
@@ -187,6 +189,16 @@ pub fn query_known_namespace(
     }
     Ok(())
 }
+
+//Iterates through a CSV, adding namespaces to either the tracking list or ignoring list
+// fn import_from_file(
+//     mongo_client: &mongodb::Client,
+//     http_client: &reqwest::Client,
+//     file: String,
+//     collection: &str,
+// ) -> Result<()> {
+    
+// }
 
 // Queries the API and returns a Struct with data relevant for shelflife's operation.
 fn get_shelflife_info(
