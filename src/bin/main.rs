@@ -4,6 +4,11 @@ extern crate dotenv;
 #[macro_use] extern crate log;
 
 use std::env;
+
+use std::fs::File;
+use std::io::{self, BufRead};
+use std::path::Path;
+
 use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
 use mongodb::ThreadedClient;
@@ -26,6 +31,7 @@ use shelflife::{
             };
 
 fn main() -> Result<()> {
+    info!("=== Running ShelfLife... ===");
     //TODO: Investigate if this is the best way to go about
     // figuring out if env variables exist.
     dotenv().ok();
@@ -62,7 +68,6 @@ fn main() -> Result<()> {
         "******We nuke old projects******\n",
         " Get a job or get D E L E T E D \n"
     );
-    info!("=== Running ShelfLife... ===");
 
     let matches = App::new("ShelfLife")
         .author("Will N. <willnilges@mail.rit.edu>")
@@ -100,6 +105,12 @@ fn main() -> Result<()> {
             .value_name("NAMESPACE")
             .help("Query API and ShelfLife Database for a known namespace. If it is missing from the database, the user is asked if they want to add it.")
             .takes_value(true))
+        .arg(Arg::with_name("file")
+            .short("f")
+            .long("file")
+            .value_name("PATH")
+            .help("Mass import projects for ShelfLife to track or ignore through a .csv file.")
+            .takes_value(true))
         .arg(Arg::with_name("project")
             .short("p")
             .long("project")
@@ -128,7 +139,7 @@ fn main() -> Result<()> {
         info!("Querying OKD API for namespace information...");
         let proj_names = get_namespaces(&http_client);
         for project in proj_names.unwrap() {
-            query_known_namespace(&mongo_client, collection, &http_client, &project, true)?;
+            query_known_namespace(&http_client, &mongo_client, collection, &project, true)?;
         }
         info!("OKD Query complete.");
     }
@@ -157,7 +168,41 @@ fn main() -> Result<()> {
     
     if let Some(known_namespace) = matches.value_of("known") {
         info!("Querying OKD API for: {}", &known_namespace);
-        query_known_namespace(&mongo_client, collection, &http_client, known_namespace, false)?;
+        query_known_namespace(&http_client, &mongo_client, collection, known_namespace, false)?;
+    }
+
+    if let Some(file) = matches.value_of("file") {
+        info!("Importing projects from CSV");
+        // import_from_file(&mongo_client, &http_client, file, collection);
+        
+        // File hosts must exist in current path before this produces output
+        if let Ok(lines) = read_lines(file) {
+            // Consumes the iterator, returns an (Optional) String
+            for line in lines {
+                if let Ok(namespace) = line {
+                    println!("Trying to {} {}...", collection, namespace);
+                    info!("Trying to {} {}...", collection, namespace);
+                    match query_known_namespace(&http_client, &mongo_client, collection, &namespace, true) {
+                        Ok(()) => {
+                            println!("Ok.");
+                            info!("Ok.")
+                        },
+                        _ => {
+                            eprintln!("Could not add {}", namespace);
+                            error!("Could not add {}", namespace);
+                        }
+                    };
+                }
+            }
+        }
+
+        // The output is wrapped in a Result to allow matching on errors
+        // Returns an Iterator to the Reader of the lines of the file.
+        fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+        where P: AsRef<Path>, {
+            let file = File::open(filename)?;
+            Ok(io::BufReader::new(file).lines())
+        }
     }
 
     if let Some(project_name) = matches.value_of("project") {
