@@ -36,7 +36,7 @@ crontab -l > mycron_tmp
 
 echo "
 0 * * * 1-3 /usr/local/bin/shelflife -a
-0 * * * 6-7 /usr/loca/bin/shelflife -a
+0 * * * 6-7 /usr/local/bin/shelflife -a
 0 12 * * 4 /usr/local/bin/shelflife -D
 0 12 * * 5 /usr/local/bin/shelflife -C
 " >> mycron_tmp
