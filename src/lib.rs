@@ -8,8 +8,10 @@ extern crate lettre;
 extern crate lettre_email;
 extern crate dotenv;
 
-use mongodb::db::ThreadedDatabase;
-use mongodb::{bson, doc, Bson, ThreadedClient};
+use mongodb::{
+    bson::{doc, Bson},
+    sync::Client,
+};
 use prettytable::Table;
 use protocol::*;
 use reqwest::StatusCode;
@@ -77,14 +79,14 @@ pub fn get_namespaces(http_client: &reqwest::Client) -> Result<Vec<String>> {
 //Queries API for a project namespace name 
 pub fn query_known_namespace(
     http_client: &reqwest::Client,
-    mongo_client: &mongodb::Client,
+    mongo_client: &Client,
     collection: &str,
     namespace: &str,
     autoadd: bool,
 ) -> Result<()> {
     // Check the MongoDB to see if we have anything by that name.
     let current_item = match mongo_client
-                             .db("SHELFLIFE")
+                             .database("shelflife")
                              .collection(collection)
                              .find_one(Some(doc!{"name": namespace}), None) {
         Ok(Some(db_result)) => {
@@ -106,7 +108,7 @@ pub fn query_known_namespace(
     let mut namespace_info = get_shelflife_info(http_client, namespace,)?;
 
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db(mongo_client, &collection)?;
+    let current_table: Vec<DBItem> = get_db(&mongo_client, &collection)?;
     
     // Check if the namespace queried for is in the DB, and if not, ask to put it in.
     let queried_namespace = namespace_info.name.to_string();
@@ -114,7 +116,7 @@ pub fn query_known_namespace(
         let mut add = false;
         println!("\"{}\" is not in the database. ", queried_namespace);
         info!("Discovered new namespace: {}", &queried_namespace);
-        let ignore: Vec<DBItem> = get_db(mongo_client, "ignore")?;
+        let ignore: Vec<DBItem> = get_db(&mongo_client, "ignore")?;
         if collection == "track" {
             if ignore.iter().any(|x| x.name.to_string() == queried_namespace) {
                 println!("However, it's ignored.\nSkipped.");
@@ -163,13 +165,13 @@ pub fn query_known_namespace(
                 "ignore" => {
                     println!("Ignoring {}...\n", queried_namespace);
                     print!("Removing theoretical tracking entry... ");
-                    let _db_result = remove_db_item(mongo_client, "track", &queried_namespace);
+                    let _db_result = remove_db_item(&mongo_client, "track", &queried_namespace);
                 }
                 _ => {
                     println!("Unknown table:\n");
                 }
             }
-            let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
+            let _table_add = add_item_to_db(&mongo_client, &collection, namespace_info);
         } else {
             println!("Invalid response.");
         }
@@ -183,8 +185,8 @@ pub fn query_known_namespace(
         };
         namespace_info.discovery_date = discovery_date; //TODO: I think there's an error to catch here.
         //TODO: Update db entry instead of adding and removing it.
-        let _db_result = remove_db_item(mongo_client, collection, &queried_namespace);
-        let _table_add = add_item_to_db(mongo_client, &collection, namespace_info);
+        let _db_result = remove_db_item(&mongo_client, collection, &queried_namespace);
+        let _table_add = add_item_to_db(&mongo_client, &collection, namespace_info);
         println!("Entry updated.");
     }
     Ok(())
@@ -192,7 +194,7 @@ pub fn query_known_namespace(
 
 //Iterates through a CSV, adding namespaces to either the tracking list or ignoring list
 // fn import_from_file(
-//     mongo_client: &mongodb::Client,
+//     mongo_client: &Client,
 //     http_client: &reqwest::Client,
 //     file: String,
 //     collection: &str,
@@ -295,7 +297,7 @@ fn get_shelflife_info(
 
 pub fn check_expiry_dates(
     http_client: &reqwest::Client, 
-    mongo_client: &mongodb::Client, 
+    mongo_client: &Client, 
     collection: &str,
     dryrun: bool,
     report: bool,
@@ -376,7 +378,7 @@ pub fn check_expiry_dates(
         .authentication_mechanism(Mechanism::Plain)
         .connection_reuse(ConnectionReuseParameters::ReuseUnlimited).transport();
 
-    let namespaces: Vec<DBItem> = get_db(mongo_client, collection).unwrap();
+    let namespaces: Vec<DBItem> = get_db(&mongo_client, collection).unwrap();
     for item in namespaces.iter(){
         // Compare last update and discovery date and see which one is more recent and go off of that.
         let last_update = DateTime::parse_from_rfc2822(&item.last_update).unwrap();
@@ -427,7 +429,7 @@ pub fn check_expiry_dates(
 
                 let delete_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, &item.name);
                 let _result = delete_call_api(&http_client, &delete_call);
-                let _db_result = remove_db_item(mongo_client, collection, &item.name);
+                let _db_result = remove_db_item(&mongo_client, collection, &item.name);
 
                 println!("Project has been marked for deletion and removed from ShelfLife DB.");
                 info!("Marked for deletion.");
@@ -703,13 +705,14 @@ pub fn delete_call_api(http_client: &reqwest::Client, call: &str,) -> Result<req
 /*                                  DATABASE FUNCTIONS  */
 /*  --------------------------------------------------  */
 
-fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem>> {
+fn get_db(mongo_client: &Client, collection: &str) -> Result<Vec<DBItem>> {
     let coll = mongo_client
-        .db("SHELFLIFE")
+        .database("shelflife")
         .collection(&collection);
     let mut namespace_table = Vec::new(); // The vec of namespace information we're gonna send back.
 
     // Find the document and receive a cursor
+    dbg!(&coll);
     let cursor = coll.find(None, None).unwrap();
     for result in cursor {
         if let Ok(item) = result {
@@ -749,9 +752,9 @@ fn get_db(mongo_client: &mongodb::Client, collection: &str) -> Result<Vec<DBItem
     Ok(namespace_table)
 }
 
-pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
+pub fn view_db(mongo_client: &Client, collection: &str) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
-    let current_table: Vec<DBItem> = get_db(mongo_client, collection)?;
+    let current_table: Vec<DBItem> = get_db(&mongo_client, collection)?;
     match collection.as_ref() {
         "track" => {
             println!("\nTracked projects:");
@@ -809,12 +812,12 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
     Ok(())
 }
 
-fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem) -> Result<()> {
+fn add_item_to_db(mongo_client: &Client, collection: &str, item: DBItem) -> Result<()> {
     let coll = mongo_client
-        .db("SHELFLIFE")
+        .database("shelflife")
         .collection(&collection);
     coll.insert_one(doc!{"name": item.name,
-                         "admins": bson::to_bson(&item.admins)?,
+                         "admins": mongodb::bson::to_bson(&item.admins)?,
                          "discovery_date": item.discovery_date, 
                          "last_update": item.last_update, 
                          "cause": item.cause}, None)
@@ -822,9 +825,9 @@ fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem
     Ok(())
 }
 
-pub fn remove_db_item(mongo_client: &mongodb::Client, collection: &str, namespace: &str) -> Result<()> {
+pub fn remove_db_item(mongo_client: &Client, collection: &str, namespace: &str) -> Result<()> {
     let coll = mongo_client
-        .db("SHELFLIFE")
+        .database("shelflife")
         .collection(collection);
     coll.find_one_and_delete(doc!{"name": namespace}, None)
         .unwrap();

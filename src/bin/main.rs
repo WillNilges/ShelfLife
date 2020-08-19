@@ -11,7 +11,10 @@ use std::path::Path;
 
 use clap::{Arg, App, AppSettings};
 use dotenv::dotenv;
-use mongodb::ThreadedClient;
+use mongodb::{
+    bson::{doc, Bson},
+    sync::Client,
+};
 
 // Logging. Ehh??
 use log::LevelFilter;
@@ -53,13 +56,24 @@ fn main() -> Result<()> {
     let endpoint = env::var("ENDPOINT")?;
     
     let http_client = reqwest::Client::new();
-    let mongo_client = mongodb::Client::connect(
-        &env::var("DB_ADDR")?,
-        env::var("DB_PORT")?
-            .parse::<u16>()
-            .expect("DB_PORT should be an integer"),
-    )
-    .expect("should connect to mongodb");
+    
+    // let mongo_client = mongodb::Client::connect(
+    //     &env::var("DB_ADDR")?,
+    //     env::var("DB_PORT")?
+    //         .parse::<u16>()
+    //         .expect("DB_PORT should be an integer"),
+    // )
+    // .expect("should connect to mongodb");
+
+    // let mongo_client_options = ClientOptions::builder()
+    //               .hosts(vec![
+    //                   StreamAddress {
+    //                       hostname: "tide.csh.rit.edu".into(),
+    //                       port: Some(27017),
+    //                   }
+    //               ])
+    //               .
+    //               .build();
 
     // Friendly and polite greeting...
     println!(
