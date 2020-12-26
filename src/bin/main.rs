@@ -27,7 +27,17 @@ fn main() -> Result<()> {
     check_env();
     let endpoint = env::var("ENDPOINT")?;
     
-    let http_client = reqwest::Client::new();
+    let http_client = match env::var("DANGER_ACCEPT_INVALID_CERTS")?.as_str() {
+        "true" => {
+            reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()?
+        },
+        _ => { // This code sucks.
+            reqwest::Client::new()
+        },
+    };
+
     let mongo_client = mongodb::Client::connect(
         &env::var("DB_ADDR")?,
         env::var("DB_PORT")?
