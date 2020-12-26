@@ -1,7 +1,8 @@
 extern crate mongodb;
 extern crate reqwest;
-#[macro_use]
-extern crate prettytable;
+#[macro_use] extern crate prettytable;
+#[macro_use] extern crate log;
+
 pub mod protocol;
 extern crate lettre;
 extern crate lettre_email;
@@ -18,19 +19,22 @@ use lettre::{Transport, SmtpClient};
 use lettre::smtp::ConnectionReuseParameters;
 use lettre_email::Email;
 use std::process::Command;
+
+// TODO: Any better way to import this stuff?
 use std::env;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 // Let's make sure those environment variables are set, yea?
 pub fn check_env() { // TODO: Actually use results.
-    let variables = vec!("OKD_TOKEN", "DB_ADDR", "DB_PORT", "SEND_MAIL", "MAIL_ROOT", "EMAIL_SRV","EMAIL_UNAME", "EMAIL_PASSWD", "EMAIL_ADDRESS", "EMAIL_DOMAIN"); 
+    let variables = vec!("OKD_TOKEN", "DB_ADDR", "DB_PORT", "SEND_MAIL", "MAIL_ROOT", "MAIL_ROOT_ADDR", "EMAIL_SRV","EMAIL_UNAME", "EMAIL_PASSWD", "EMAIL_ADDRESS", "EMAIL_DOMAIN", "BACKUP_PATH", "LOG_PATH"); 
 
     for i in variables {
         match env::var(i) {
             Ok(environment_var) => {
                 if environment_var == "" {
                     println!("Can't find {}! This'll produce a TON of errors!", i);
+                    error!("Can't find {}! This'll produce a TON of errors!", i);
                     panic!("Refusing to continue without all vars.");
                 }
                 // TODO: Verbose mode feature.
@@ -40,6 +44,7 @@ pub fn check_env() { // TODO: Actually use results.
             },
             Err(e) => {
                 eprintln!("Can't find {}! {}", i, e);
+                error!("Can't find {}! This'll produce a TON of errors!", i);
                 panic!("Refusing to continue without all vars.");
             },
         };
@@ -71,9 +76,9 @@ pub fn get_namespaces(http_client: &reqwest::Client) -> Result<Vec<String>> {
 
 //Queries API for a project namespace name 
 pub fn query_known_namespace(
+    http_client: &reqwest::Client,
     mongo_client: &mongodb::Client,
     collection: &str,
-    http_client: &reqwest::Client,
     namespace: &str,
     autoadd: bool,
 ) -> Result<()> {
@@ -97,7 +102,7 @@ pub fn query_known_namespace(
     };
 
     // Get all the data we need from the OpenShift API.
-    println!("{}",format!("Querying API for namespace {}...", namespace).to_string());
+    println!("{}",format!("Querying API for namespace \"{}\"...", namespace).to_string());
     let mut namespace_info = get_shelflife_info(http_client, namespace,)?;
 
     // Query the DB and get back a table of already added namespaces
@@ -107,19 +112,23 @@ pub fn query_known_namespace(
     let queried_namespace = namespace_info.name.to_string();
     if !current_table.iter().any(|x| x.name.to_string() == queried_namespace) {
         let mut add = false;
-        println!("This namespace ({}) is not in the database. ", queried_namespace);
-        let whitelist: Vec<DBItem> = get_db(mongo_client, "whitelist").unwrap();
-        if collection == "graylist" {
-            if whitelist.iter().any(|x| x.name.to_string() == queried_namespace) {
-                println!("However, it's whitelisted. Skipping...");
+        println!("\"{}\" is not in the database. ", queried_namespace);
+        info!("Discovered new namespace: {}", &queried_namespace);
+        let ignore: Vec<DBItem> = get_db(mongo_client, "ignore")?;
+        if collection == "track" {
+            if ignore.iter().any(|x| x.name.to_string() == queried_namespace) {
+                println!("However, it's ignored.\nSkipped.");
+                warn!("However, it's ignored.\nSkipped.");
                 return Ok(());
             }
             if namespace_info.admins.len() == 0 {
-                println!("However, this namespace has 0 admins. Assuming OpenShift namespace and skipping...");
+                println!("This namespace has 0 admins. Assuming part of OKD.\nSkipped.");
+                warn!("This namespace has 0 admins. Assuming part of OKD.\nSkipped.");
                 return Ok(());
             }
             if namespace_info.name == "management-infra" || namespace_info.name == "default" {
-                println!("This looks like something important. Skipping...");
+                println!("This looks important.\nSkipped.");
+                warn!("This looks important.\nSkipped.");
                 return Ok(());
             }
         }
@@ -148,13 +157,13 @@ pub fn query_known_namespace(
             let nowrfc = now.to_rfc2822();
             namespace_info.discovery_date = nowrfc;
              match collection.as_ref() {
-                "graylist" => {
-                    println!("Graylisting {}\n", queried_namespace);
+                "track" => {
+                    println!("Tracking {}\n", queried_namespace);
                 }
-                "whitelist" => {
-                    println!("Whitelisting {}...\n", queried_namespace);
-                    print!("Removing theoretical greylist entry... ");
-                    let _db_result = remove_db_item(mongo_client, "graylist", &queried_namespace);
+                "ignore" => {
+                    println!("Ignoring {}...\n", queried_namespace);
+                    print!("Removing theoretical tracking entry... ");
+                    let _db_result = remove_db_item(mongo_client, "track", &queried_namespace);
                 }
                 _ => {
                     println!("Unknown table:\n");
@@ -166,6 +175,7 @@ pub fn query_known_namespace(
         }
     } else {
         println!("The requested namespace is in the database. Updating entry...");
+        info!("Updated namespace: {}", &queried_namespace);
         // Preserve the discovery date.
         let discovery_date = match current_item {
             Some(item) => item.get_str("discovery_date").unwrap().to_string(),
@@ -180,12 +190,22 @@ pub fn query_known_namespace(
     Ok(())
 }
 
+//Iterates through a CSV, adding namespaces to either the tracking list or ignoring list
+// fn import_from_file(
+//     mongo_client: &mongodb::Client,
+//     http_client: &reqwest::Client,
+//     file: String,
+//     collection: &str,
+// ) -> Result<()> {
+    
+// }
+
 // Queries the API and returns a Struct with data relevant for shelflife's operation.
 fn get_shelflife_info(
     http_client: &reqwest::Client,
     namespace: &str,
 ) -> Result<DBItem> {
-    let endpoint = env::var("ENDPOINT")?; 
+    let endpoint = env::var("ENDPOINT")?;
 
     // Query for creation date. This is guaranteed to exist.
     let namespace_call = format!("https://{}/apis/project.openshift.io/v1/projects/{}", endpoint, namespace); // Formulate the call
@@ -277,7 +297,8 @@ pub fn check_expiry_dates(
     http_client: &reqwest::Client, 
     mongo_client: &mongodb::Client, 
     collection: &str,
-    dryrun: bool
+    dryrun: bool,
+    report: bool,
 ) -> Result<()>{
     let endpoint = env::var("ENDPOINT")?; 
 
@@ -286,6 +307,7 @@ pub fn check_expiry_dates(
     let email_passwd = env::var("EMAIL_PASSWD")?;
     let email_addr = env::var("EMAIL_ADDRESS")?;
     let email_domain = env::var("EMAIL_DOMAIN")?;
+    let root_email = env::var("MAIL_ROOT_ADDR")?;
 
     // See if we should email anyone about what we're doing.
     // This is mostly for development purposes.
@@ -336,11 +358,18 @@ pub fn check_expiry_dates(
     println!("Got all env variables.");
 
     if dryrun {
-        // usemail = false;
-        // send_to_root = false;
         println!("We are in DRYRUN MODE! NONE OF SHELFLIFE'S ACTIONS ARE ACTUALLY HAPPENING!");
     }
 
+    let mut report_table = Table::new(); // Create the table for the report
+
+    // Namespace — The namespace
+    // Admins — Who owns and operates it
+    // Age — How many weeks old it is
+    // Action — What ShelfLife is going to do to it
+    report_table.add_row(row!["Namespace", "Admins", "Age", "Action"]);
+
+    let addr: &str = &*email_addr;
     let mut mailer = SmtpClient::new_simple(&email_srv).unwrap()
         .credentials(Credentials::new(email_uname.to_string(), email_passwd.to_string()))
         .smtp_utf8(true)
@@ -366,11 +395,19 @@ pub fn check_expiry_dates(
         };
         
         print!("Checking status of {}...", &item.name);
+        info!("Checking status of {}...", &item.name);
 
-        let addr: &str = &*email_addr;
         // TWENTY FOUR WEEKS!
         if age > chrono::Duration::weeks(24) { // Check longest first, decending.
             println!("The last update to {} was more than 24 weeks ago.", &item.name);
+            warn!("Age >24 weeks.");
+            if report {
+                report_table.add_row(row![
+                    &item.name,
+                    format!("{:?}", item.admins),
+                    Duration::num_weeks(&age),
+                    "Archive"]);
+            }
             if !dryrun {
                 println!("Project marked for deletion...");
                 println!("Exporting project...");
@@ -378,9 +415,11 @@ pub fn check_expiry_dates(
                 match export_result {
                     Ok(()) => {
                         println!("Export complete.");
+                        info!("Exported.")
                     }
                     _ => {
                         println!("Export failed!");
+                        error!("Export failed!");
                         dbg!(&export_result);
                     }
                 }
@@ -391,6 +430,7 @@ pub fn check_expiry_dates(
                 let _db_result = remove_db_item(mongo_client, collection, &item.name);
 
                 println!("Project has been marked for deletion and removed from ShelfLife DB.");
+                info!("Marked for deletion.");
 
                 // Find the names of the admins and send them M A I L!
                 if usemail {
@@ -401,6 +441,7 @@ pub fn check_expiry_dates(
                             println!("I am NOT going to email root.");
                         } else {
                             println!("Notifying {}", &strpname);
+                            info!("Notifying {}", &strpname);
                             let strpname = name.replace("\"", "");
                             let email = Email::builder()
                                 .to((format!("{}@{}", strpname, email_domain), strpname))
@@ -411,6 +452,7 @@ pub fn check_expiry_dates(
                             match email {
                                 Err(e) => {
                                     println!("Could not send email. Invalid email address?");
+                                    error!("Could not send email.");
                                     eprintln!("{}", e);
                                 },
                                 _ => {
@@ -424,8 +466,17 @@ pub fn check_expiry_dates(
 
         }else if age > chrono::Duration::weeks(16) {
             println!("The last update to {} was more than 16 weeks ago.", &item.name);
+            warn!("Age >16 weeks.");
+            if report {
+                report_table.add_row(row![
+                    &item.name,
+                    format!("{:?}", item.admins),
+                    Duration::num_weeks(&age),
+                    "Spin-Down"]);
+            }
             if !dryrun {
                 println!("Spinning down...");
+                info!("Spinning down...");
 
                 // Query deployment configs that will need to be spun down.
                 let deploycfgs_call = format!(
@@ -464,6 +515,7 @@ pub fn check_expiry_dates(
                             println!("I am NOT going to email root.");
                         } else {
                             println!("Notifying {}", &strpname);
+                            info!("Notifying {}", &strpname);
                             let email = Email::builder()
                                 .to((format!("{}@{}", strpname, email_domain), strpname))
                                 .from(addr)
@@ -473,6 +525,7 @@ pub fn check_expiry_dates(
                             match email {
                                 Err(e) => {
                                     println!("Could not send email. Invalid email address?");
+                                    error!("Could not send email.");
                                     eprintln!("{}", e);
                                 },
                                 _ => {
@@ -485,6 +538,14 @@ pub fn check_expiry_dates(
             }
         }else if age > chrono::Duration::weeks(12) {
             println!("The last update to {} was more than 12 weeks ago.", &item.name);
+            warn!("Age >12 weeks.");
+            if report {
+                report_table.add_row(row![
+                    &item.name,
+                    format!("{:?}", item.admins),
+                    Duration::num_weeks(&age),
+                    "Nudge"]);
+            }
             if !dryrun && usemail {
                 // Find the names of the admins and send them M A I L!
                 println!("Notifying admins...");
@@ -494,15 +555,17 @@ pub fn check_expiry_dates(
                         println!("I am NOT going to email root.");
                     } else {
                         println!("Notifying {}", &strpname);
+                        info!("Notifying {}", &strpname);
                         let email = Email::builder()
                             .to((format!("{}@{}", strpname, email_domain), strpname))
                             .from(addr)
                             .subject(format!("Old OKD project: {}", &item.name))
-                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to put the project on ShelfLife's whitelist. Thanks!.", &item.name, &item.last_update))
+                            .text(format!("Hello! You are receiving this message because your OKD project, {}, has gone more than 12 weeks without an update ({}). Please consider updating with a build, deployment, or asking an RTP to have ShelfLife ignore it. Thanks!.", &item.name, &item.last_update))
                             .build();
                         match email {
                             Err(e) => {
                                 println!("Could not send email. Invalid email address?");
+                                error!("Could not send email.");
                                 eprintln!("{}", e);
                             },
                             _ => {
@@ -516,7 +579,34 @@ pub fn check_expiry_dates(
             println!(" ok.");
         }
     }
+    if report {
+        let report_message = match dryrun {
+            true => "Hello! ShelfLife is going to take the following actions against these projects soon. If this doesn't look right, hop on a console and fix it!",
+            false => "Hello! ShelfLife has just taken the following actions against these projects. If something doesn't look right, please direct a complaint to /dev/null on any user machine. Thank you for using ShelfLife! Get a job, or get D E L E T E D.", // TODO: Make these customizable with env variables. (crikey this is really just turning into some kind of config file now, innit?)
+        };
+        info!("Sending report...");
+        println!("Sending report...");
+        let email = Email::builder()
+            .to((format!("{}@{}", root_email, email_domain), root_email))
+            .from(addr)
+            .subject(format!("ShelfLife Report"))
+            .text(format!("{} \n {}", report_message, report_table.to_string()))
+            .build();
+        match email {
+            Err(e) => {
+                println!("Could not send email. Invalid email address?");
+                error!("Could not send email.");
+                eprintln!("{}", e);
+            },
+            _ => {
+                let _mail_result = mailer.send(email.unwrap().into());
+            }
+        }
+    }
+
     mailer.close(); 
+    println!("Report Sent: ");
+    report_table.printstd(); // Print the table to stdout
     Ok(())
 }
 
@@ -584,8 +674,9 @@ pub fn put_call_api(http_client: &reqwest::Client, call: &str, post: String,) ->
     if response.status() == StatusCode::OK {
         Ok(response)
     } else {
+        error!("Could not run API call. Call: {}, Code: {}", call, response.status());
         return Err(From::from(format!(
-            "Error! Could not run API call. Call: {}, Code: {}", call, response.status()),
+            "Error: Could not run API call. Call: {}, Code: {}", call, response.status()),
         ));
     }
 }
@@ -601,8 +692,9 @@ pub fn delete_call_api(http_client: &reqwest::Client, call: &str,) -> Result<req
     if response.status() == StatusCode::OK {
         Ok(response)
     } else {
+        error!("Could not run API call. Call: {}, Code: {}", call, response.status());
         return Err(From::from(format!(
-            "Error! Could not run API call. Call: {}, Code: {}", call, response.status()),
+            "Error: Could not run API call. Call: {}, Code: {}", call, response.status()),
         ));
     }
 
@@ -661,11 +753,11 @@ pub fn view_db(mongo_client: &mongodb::Client, collection: &str) -> Result<()> {
     // Query the DB and get back a table of already added namespaces
     let current_table: Vec<DBItem> = get_db(mongo_client, collection).unwrap();
     match collection.as_ref() {
-        "graylist" => {
-            println!("\nGraylisted projects:");
+        "track" => {
+            println!("\nTracked projects:");
         }
-        "whitelist" => {
-            println!("\nWhitelisted projects:");
+        "ignore" => {
+            println!("\nIgnored projects:");
         }
         _ => {
             println!("\nUnknown table:");

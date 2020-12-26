@@ -1,6 +1,6 @@
 [package]
 name = "shelflife"
-version = "1.1.0"
+version = "1.3.0"
 authors = ["wilnil"]
 edition = "2018"
 
@@ -23,6 +23,9 @@ regex = "1.3.7"
 parking_lot = "0.10.0"
 tokio = { version = "0.2", features = ["macros"] }
 warp = "0.2"
+log = "0.4.11"
+log4rs = "0.13.0"
+error-chain = "0.12.4"
 
 [lib]
 name = "shelflife"
