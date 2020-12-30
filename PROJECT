@@ -1,0 +1,8 @@
+domain: csh.rit.edu
+layout: go.kubebuilder.io/v3
+projectName: shelflife
+repo: gituhb.com/willnilges/shelflife
+version: 3-alpha
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
