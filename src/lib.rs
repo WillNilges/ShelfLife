@@ -814,7 +814,7 @@ fn add_item_to_db(mongo_client: &mongodb::Client, collection: &str, item: DBItem
         .db("SHELFLIFE")
         .collection(&collection);
     coll.insert_one(doc!{"name": item.name,
-                         "admins": bson::to_bson(&item.admins)?,
+                         "admins": mongodb::to_bson(&item.admins)?,
                          "discovery_date": item.discovery_date, 
                          "last_update": item.last_update, 
                          "cause": item.cause}, None)
